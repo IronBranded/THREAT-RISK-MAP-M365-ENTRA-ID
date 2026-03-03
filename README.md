@@ -1,6 +1,6 @@
 # Threat & Risk Map — M365 / Entra ID
 
-A practical, interactive reference for DFIR investigators and security analysts working Microsoft 365 and Entra ID incidents. Covers 21 threat scenarios with IOCs, IOAs, MITRE ATT&CK mappings, KQL detection queries, and mitigations — all in a single HTML file.
+A practical, interactive reference for DFIR investigators and security analysts working Microsoft 365 and Entra ID incidents. Covers 21 threat scenarios with IOCs, IOAs, MITRE ATT&CK mappings, KQL detection queries, and mitigations.
 
 ---
 
