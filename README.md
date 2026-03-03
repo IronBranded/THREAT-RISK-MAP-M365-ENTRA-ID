@@ -6,7 +6,11 @@ A practical, interactive reference for DFIR investigators and security analysts 
 
 ## Usage
 
-Download `m365-dfir-threat-map.html` and open it in any browser. No install, no dependencies, no server required.
+Download `m365-dfir-threat-map.html` and open it in any browser. No install, no dependencies, no server required
+
+OR
+
+Run it directly here https://ironbranded.github.io/THREAT-RISK-MAP-M365-ENTRA-ID/
 
 ---
 
