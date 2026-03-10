@@ -226,37 +226,54 @@ const CAT_COLORS = {
   privesc:     "#fbbf24",
 };
 
-// Per-threat likelihood (1-5) and impact (1-5) — independently scored so threats spread across the matrix
+// Per-threat likelihood (1-5) and impact (1-5) — independently scored
+// Likelihood: how frequently seen in the wild across M365 environments
+// Impact:     blast radius if successfully executed (data loss, tenant control, fraud)
 const THREAT_RISK = {
-  "uac":                      { l: 5, i: 4 },
-  "aad-recon":                { l: 4, i: 2 },
-  "hybrid-identity-attack":   { l: 2, i: 5 },
-  "impossible-travel-bypass": { l: 3, i: 3 },
-  "service-principal-abuse":  { l: 3, i: 4 },
-  "bec-internal":             { l: 4, i: 5 },
-  "bec-external":             { l: 3, i: 5 },
-  "bec-inbox-rules":          { l: 4, i: 4 },
-  "email-rules":              { l: 4, i: 3 },
-  "teams-phishing":           { l: 4, i: 3 },
-  "aitm":                     { l: 4, i: 5 },
-  "token-theft":              { l: 3, i: 5 },
-  "mfa-fatigue":              { l: 4, i: 4 },
-  "device-code-phishing":     { l: 3, i: 3 },
-  "legacy-auth":              { l: 3, i: 3 },
-  "cap-gaps":                 { l: 4, i: 3 },
-  "app-registration":         { l: 3, i: 4 },
-  "abnormal-useragent":       { l: 3, i: 2 },
-  "illicit-consent":          { l: 4, i: 4 },
-  "power-platform-abuse":     { l: 3, i: 3 },
-  "persistence-federated":    { l: 1, i: 5 },
-  "guest-account-abuse":      { l: 3, i: 2 },
-  "ghost-device":             { l: 3, i: 3 },
-  "pim-abuse":                { l: 2, i: 5 },
-  "exchange-transport-rule":  { l: 2, i: 4 },
-  "exfil-graph":              { l: 3, i: 4 },
-  "copilot-abuse":            { l: 3, i: 3 },
-  "sharepoint-ransomware":    { l: 2, i: 4 },
-  "privesc-role":             { l: 2, i: 5 },
+  // ── Identity & Account ──────────────────────────────────────────
+  "uac":                      { l: 5, i: 5 }, // Most common vector AND full tenant risk if admin account
+  "aad-recon":                { l: 4, i: 2 }, // Very common post-compromise; low direct impact on its own
+  "hybrid-identity-attack":   { l: 2, i: 5 }, // Requires on-prem foothold first; catastrophic if achieved
+  "impossible-travel-bypass": { l: 3, i: 2 }, // Evasion technique, not a standalone attack; low direct impact
+  "service-principal-abuse":  { l: 3, i: 4 }, // Leaked secrets common; app-level perms = broad data access
+
+  // ── Email / BEC ──────────────────────────────────────────────────
+  "bec-internal":             { l: 4, i: 5 }, // Very common; direct financial fraud + deep internal trust abuse
+  "bec-external":             { l: 3, i: 5 }, // Slightly less frequent but high financial impact
+  "bec-inbox-rules":          { l: 5, i: 4 }, // Extremely common post-compromise step; enables ongoing BEC
+  "email-rules":              { l: 4, i: 3 }, // Common; medium impact — enables monitoring but not direct fraud alone
+  "teams-phishing":           { l: 4, i: 3 }, // Growing rapidly; bypasses email controls
+
+  // ── Authentication ───────────────────────────────────────────────
+  "aitm":                     { l: 4, i: 5 }, // Commodity kits (EvilProxy); defeats MFA entirely
+  "token-theft":              { l: 4, i: 5 }, // Very common via infostealer; full session access, MFA bypassed
+  "mfa-fatigue":              { l: 4, i: 4 }, // Well-documented; effective against push MFA without number match
+  "device-code-phishing":     { l: 3, i: 3 }, // Targeted; moderate frequency and impact
+  "legacy-auth":              { l: 3, i: 3 }, // Declining (MSFT deprecated) but still exploited in some tenants
+
+  // ── Access Control ───────────────────────────────────────────────
+  "cap-gaps":                 { l: 4, i: 4 }, // Misconfigs are pervasive; a gap enables full MFA bypass
+
+  // ── Application Abuse ────────────────────────────────────────────
+  "app-registration":         { l: 3, i: 4 }, // Targeted attack; survives password reset
+  "abnormal-useragent":       { l: 3, i: 2 }, // Indicator/recon tool; impact depends on what follows
+  "illicit-consent":          { l: 4, i: 4 }, // Phishing campaigns common; persistent delegated access
+  "power-platform-abuse":     { l: 3, i: 4 }, // Overlooked surface; data egress via flows is hard to detect
+
+  // ── Persistence ──────────────────────────────────────────────────
+  "persistence-federated":    { l: 2, i: 5 }, // Rare but used by nation-state actors (SolarWinds); total control
+  "guest-account-abuse":      { l: 3, i: 2 }, // Common oversight; limited impact unless added to privileged groups
+  "ghost-device":             { l: 3, i: 3 }, // Moderate frequency; enables CAP bypass and PRT abuse
+  "pim-abuse":                { l: 2, i: 5 }, // Requires eligible role + compromise; devastating if achieved
+  "exchange-transport-rule":  { l: 2, i: 5 }, // Rare but org-wide email interception = catastrophic
+
+  // ── Exfiltration ─────────────────────────────────────────────────
+  "exfil-graph":              { l: 3, i: 4 }, // Common post-compromise step; silent bulk data theft
+  "copilot-abuse":            { l: 3, i: 3 }, // Emerging; growing as Copilot adoption increases
+  "sharepoint-ransomware":    { l: 2, i: 4 }, // Less frequent; high impact — potential data loss with no recovery
+
+  // ── Privilege Escalation ─────────────────────────────────────────
+  "privesc-role":             { l: 3, i: 5 }, // Common attacker goal; Global Admin = complete tenant control
 };
 
 // ─── THREAT DATA ────────────────────────────────────────────────────────────
