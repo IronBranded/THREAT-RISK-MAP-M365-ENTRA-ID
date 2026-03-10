@@ -226,8 +226,38 @@ const CAT_COLORS = {
   privesc:     "#fbbf24",
 };
 
-const LIKELIHOOD = { critical: 5, high: 4, medium: 3, low: 2 };
-const IMPACT     = { critical: 5, high: 4, medium: 3, low: 2 };
+// Per-threat likelihood (1-5) and impact (1-5) — independently scored so threats spread across the matrix
+const THREAT_RISK = {
+  "uac":                      { l: 5, i: 4 },
+  "aad-recon":                { l: 4, i: 2 },
+  "hybrid-identity-attack":   { l: 2, i: 5 },
+  "impossible-travel-bypass": { l: 3, i: 3 },
+  "service-principal-abuse":  { l: 3, i: 4 },
+  "bec-internal":             { l: 4, i: 5 },
+  "bec-external":             { l: 3, i: 5 },
+  "bec-inbox-rules":          { l: 4, i: 4 },
+  "email-rules":              { l: 4, i: 3 },
+  "teams-phishing":           { l: 4, i: 3 },
+  "aitm":                     { l: 4, i: 5 },
+  "token-theft":              { l: 3, i: 5 },
+  "mfa-fatigue":              { l: 4, i: 4 },
+  "device-code-phishing":     { l: 3, i: 3 },
+  "legacy-auth":              { l: 3, i: 3 },
+  "cap-gaps":                 { l: 4, i: 3 },
+  "app-registration":         { l: 3, i: 4 },
+  "abnormal-useragent":       { l: 3, i: 2 },
+  "illicit-consent":          { l: 4, i: 4 },
+  "power-platform-abuse":     { l: 3, i: 3 },
+  "persistence-federated":    { l: 1, i: 5 },
+  "guest-account-abuse":      { l: 3, i: 2 },
+  "ghost-device":             { l: 3, i: 3 },
+  "pim-abuse":                { l: 2, i: 5 },
+  "exchange-transport-rule":  { l: 2, i: 4 },
+  "exfil-graph":              { l: 3, i: 4 },
+  "copilot-abuse":            { l: 3, i: 3 },
+  "sharepoint-ransomware":    { l: 2, i: 4 },
+  "privesc-role":             { l: 2, i: 5 },
+};
 
 // ─── THREAT DATA ────────────────────────────────────────────────────────────
 
@@ -3027,113 +3057,198 @@ function RunbookTab({ runbook, implemented, onToggle }) {
 // ─── HEAT MAP VIEW ───────────────────────────────────────────────────────────
 
 function HeatMapView({ threats: filteredThreats, onSelectThreat }) {
-  const [tooltip, setTooltip] = useState(null);
+  const [expandedCell, setExpandedCell] = useState(null); // key of expanded cell
 
   const matrix = useMemo(() => {
     const grid = {};
     filteredThreats.forEach(t => {
-      const l = LIKELIHOOD[t.severity] || 3;
-      const imp = IMPACT[t.severity] || 3;
-      const key = `${l}-${imp}`;
+      const risk = THREAT_RISK[t.id] || { l: 3, i: 3 };
+      const key = `${risk.l}-${risk.i}`;
       if (!grid[key]) grid[key] = [];
       grid[key].push(t);
     });
     return grid;
   }, [filteredThreats]);
 
-  const levels = [5, 4, 3, 2, 1];
+  const levels = [5, 4, 3, 2, 1]; // rows top→bottom = high→low likelihood
+  const impacts = [1, 2, 3, 4, 5]; // cols left→right = low→high impact
 
-  const getCellColor = (l, imp) => {
+  const getCellStyle = (l, imp) => {
     const risk = l * imp;
-    if (risk >= 20) return { bg: "rgba(255,51,85,0.18)", border: "rgba(255,51,85,0.5)", glow: "#ff3355" };
-    if (risk >= 12) return { bg: "rgba(255,136,51,0.15)", border: "rgba(255,136,51,0.4)", glow: "#ff8833" };
-    if (risk >= 6) return { bg: "rgba(255,204,0,0.12)", border: "rgba(255,204,0,0.3)", glow: "#ffcc00" };
-    return { bg: "rgba(51,170,255,0.08)", border: "rgba(51,170,255,0.2)", glow: "#33aaff" };
+    if (risk >= 20) return { bg: "rgba(255,51,85,0.14)",  activeBg: "rgba(255,51,85,0.22)",  border: "rgba(255,51,85,0.45)",  glow: "#ff3355", label: "CRITICAL" };
+    if (risk >= 15) return { bg: "rgba(255,80,50,0.12)",  activeBg: "rgba(255,80,50,0.20)",   border: "rgba(255,80,50,0.38)",   glow: "#ff5033", label: "HIGH" };
+    if (risk >= 9)  return { bg: "rgba(255,136,51,0.12)", activeBg: "rgba(255,136,51,0.20)",  border: "rgba(255,136,51,0.38)", glow: "#ff8833", label: "HIGH" };
+    if (risk >= 5)  return { bg: "rgba(255,204,0,0.10)",  activeBg: "rgba(255,204,0,0.18)",   border: "rgba(255,204,0,0.30)",  glow: "#ffcc00", label: "MEDIUM" };
+    return           { bg: "rgba(51,170,255,0.06)",  activeBg: "rgba(51,170,255,0.12)",  border: "rgba(51,170,255,0.20)", glow: "#33aaff", label: "LOW" };
   };
 
-  const labelMap = { 5: "CRITICAL", 4: "HIGH", 3: "MEDIUM", 2: "LOW", 1: "MINIMAL" };
+  const axisLabel = { 5: "CRITICAL (5)", 4: "HIGH (4)", 3: "MEDIUM (3)", 2: "LOW (2)", 1: "MINIMAL (1)" };
+  const axisShort = { 5: "5 — CRITICAL", 4: "4 — HIGH", 3: "3 — MEDIUM", 2: "2 — LOW", 1: "1 — MINIMAL" };
 
   return (
-    <div style={{ padding: "20px 0" }}>
-      <div style={{ marginBottom: 20, display: "flex", alignItems: "center", gap: 16 }}>
+    <div style={{ padding: "4px 0 20px" }}>
+      {/* Header */}
+      <div style={{ marginBottom: 24, display: "flex", alignItems: "flex-start", gap: 16 }}>
         <div>
-          <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 18, fontWeight: 700, color: "#e8edf5", letterSpacing: 1 }}>RISK HEAT MAP</div>
-          <div style={{ fontSize: 11, color: "#5a7090", fontFamily: "'IBM Plex Mono', monospace", marginTop: 3 }}>Likelihood × Impact matrix — click any cell to inspect threats</div>
+          <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 20, fontWeight: 800, color: "#e8edf5", letterSpacing: 1.5, textTransform: "uppercase" }}>Risk Heat Map</div>
+          <div style={{ fontSize: 11, color: "#4a6080", fontFamily: "'IBM Plex Mono', monospace", marginTop: 4 }}>
+            Likelihood × Impact — each threat independently scored · click any cell to expand
+          </div>
         </div>
         <div style={{ flex: 1 }} />
-        <div style={{ display: "flex", gap: 12 }}>
-          {[["CRITICAL", "#ff3355"], ["HIGH", "#ff8833"], ["MEDIUM", "#ffcc00"], ["LOW", "#33aaff"]].map(([l, c]) => (
-            <div key={l} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <div style={{ width: 10, height: 10, borderRadius: 2, background: c, opacity: 0.7 }} />
-              <span style={{ fontSize: 10, color: "#5a7090", fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: 1 }}>{l}</span>
+        {/* Risk zone legend */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 5, alignItems: "flex-end" }}>
+          {[
+            ["≥ 20  CRITICAL RISK", "#ff3355"],
+            ["≥ 15  HIGH RISK", "#ff5033"],
+            ["≥ 9   ELEVATED RISK", "#ff8833"],
+            ["≥ 5   MEDIUM RISK", "#ffcc00"],
+            ["< 5   LOW RISK", "#33aaff"],
+          ].map(([label, color]) => (
+            <div key={label} style={{ display: "flex", alignItems: "center", gap: 7 }}>
+              <div style={{ width: 22, height: 6, borderRadius: 1, background: color, opacity: 0.75 }} />
+              <span style={{ fontSize: 10, color: "#4a6080", fontFamily: "'Share Tech Mono', monospace", letterSpacing: 0.5 }}>{label}</span>
             </div>
           ))}
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 0 }}>
-        {/* Y axis label */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", writingMode: "vertical-rl", transform: "rotate(180deg)", paddingRight: 10, fontSize: 10, color: "#3a4a60", fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: 2 }}>
-          LIKELIHOOD →
+      {/* Matrix */}
+      <div style={{ display: "flex", gap: 10 }}>
+        {/* Y-axis label (rotated) */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <div style={{ writingMode: "vertical-rl", transform: "rotate(180deg)", fontSize: 10, color: "#2a3a55", fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: 3, textTransform: "uppercase", userSelect: "none" }}>
+            Likelihood ↑
+          </div>
         </div>
 
-        <div style={{ flex: 1 }}>
-          {/* Grid */}
-          <div style={{ display: "grid", gridTemplateColumns: "80px repeat(5, 1fr)", gap: 4 }}>
-            {/* Header row */}
-            <div />
-            {[1, 2, 3, 4, 5].map(imp => (
-              <div key={imp} style={{ textAlign: "center", fontSize: 10, color: "#3a4a60", fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: 1, paddingBottom: 6 }}>
-                {labelMap[imp]}
-              </div>
-            ))}
-
-            {levels.map(l => (
-              <React.Fragment key={l}>
-                {/* Row label */}
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: 10, fontSize: 10, color: "#3a4a60", fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: 1 }}>
-                  {labelMap[l]}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {/* Column headers (Impact) */}
+          <div style={{ display: "grid", gridTemplateColumns: "110px repeat(5, 1fr)", gap: 5, marginBottom: 5 }}>
+            <div style={{ display: "flex", alignItems: "flex-end", paddingBottom: 4 }}>
+              <span style={{ fontSize: 9, color: "#2a3a55", fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: 2 }}>IMPACT →</span>
+            </div>
+            {impacts.map(imp => (
+              <div key={imp} style={{ textAlign: "center", paddingBottom: 6, borderBottom: "1px solid #111c2e" }}>
+                <div style={{ fontSize: 11, color: "#4a6080", fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: 1, fontWeight: 700 }}>{imp}</div>
+                <div style={{ fontSize: 9, color: "#2a3a55", fontFamily: "'Share Tech Mono', monospace", marginTop: 1 }}>
+                  {imp === 1 ? "MINIMAL" : imp === 2 ? "LOW" : imp === 3 ? "MEDIUM" : imp === 4 ? "HIGH" : "CRITICAL"}
                 </div>
-                {[1, 2, 3, 4, 5].map(imp => {
-                  const key = `${l}-${imp}`;
-                  const cellThreats = matrix[key] || [];
-                  const colors = getCellColor(l, imp);
-                  return (
-                    <div key={imp} className="heat-cell" style={{ minHeight: 80, background: cellThreats.length > 0 ? colors.bg : "rgba(255,255,255,0.02)", border: `1px solid ${cellThreats.length > 0 ? colors.border : "#1a2a40"}`, borderRadius: 3, padding: 8, display: "flex", flexDirection: "column", gap: 4, boxShadow: cellThreats.length > 0 ? `0 0 10px ${colors.glow}20` : "none", position: "relative" }}
-                      onMouseEnter={e => cellThreats.length > 0 && setTooltip({ x: e.clientX, y: e.clientY, threats: cellThreats })}
-                      onMouseLeave={() => setTooltip(null)}>
-                      {cellThreats.length > 0 && (
-                        <div style={{ position: "absolute", top: 4, right: 6, fontFamily: "'Share Tech Mono', monospace", fontSize: 16, fontWeight: 700, color: colors.glow, opacity: 0.5 }}>{cellThreats.length}</div>
-                      )}
-                      {cellThreats.slice(0, 3).map(t => (
-                        <div key={t.id} onClick={() => onSelectThreat(t)} style={{ fontSize: 10, color: colors.glow || "#a0b4cc", fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 600, lineHeight: 1.3, cursor: "pointer", letterSpacing: 0.3 }}>
-                          {t.title.length > 22 ? t.title.slice(0, 22) + "…" : t.title}
-                        </div>
-                      ))}
-                      {cellThreats.length > 3 && (
-                        <div style={{ fontSize: 10, color: "#3a4a60", fontFamily: "'Share Tech Mono', monospace" }}>+{cellThreats.length - 3} more</div>
-                      )}
-                    </div>
-                  );
-                })}
-              </React.Fragment>
+              </div>
             ))}
           </div>
 
+          {/* Rows */}
+          {levels.map(l => (
+            <div key={l} style={{ display: "grid", gridTemplateColumns: "110px repeat(5, 1fr)", gap: 5, marginBottom: 5 }}>
+              {/* Row label */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: 12, borderRight: "1px solid #111c2e" }}>
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontSize: 11, color: "#4a6080", fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: 1, fontWeight: 700 }}>{l}</div>
+                  <div style={{ fontSize: 9, color: "#2a3a55", fontFamily: "'Share Tech Mono', monospace", marginTop: 1 }}>
+                    {l === 5 ? "CRITICAL" : l === 4 ? "HIGH" : l === 3 ? "MEDIUM" : l === 2 ? "LOW" : "MINIMAL"}
+                  </div>
+                </div>
+              </div>
+
+              {/* Cells */}
+              {impacts.map(imp => {
+                const key = `${l}-${imp}`;
+                const cellThreats = matrix[key] || [];
+                const cs = getCellStyle(l, imp);
+                const isExpanded = expandedCell === key;
+                const hasThreats = cellThreats.length > 0;
+                const riskScore = l * imp;
+
+                return (
+                  <div key={imp}
+                    onClick={() => hasThreats && setExpandedCell(isExpanded ? null : key)}
+                    style={{
+                      minHeight: 110,
+                      background: hasThreats ? (isExpanded ? cs.activeBg : cs.bg) : "rgba(255,255,255,0.015)",
+                      border: `1px solid ${hasThreats ? cs.border : "#0f1825"}`,
+                      borderRadius: 4,
+                      padding: "10px 10px 8px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 5,
+                      cursor: hasThreats ? "pointer" : "default",
+                      transition: "all 0.18s ease",
+                      boxShadow: hasThreats && isExpanded ? `0 0 18px ${cs.glow}30` : hasThreats ? `0 0 8px ${cs.glow}12` : "none",
+                      position: "relative",
+                    }}>
+                    {/* Risk score watermark */}
+                    <div style={{ position: "absolute", bottom: 6, right: 8, fontFamily: "'Share Tech Mono', monospace", fontSize: 20, fontWeight: 700, color: hasThreats ? cs.glow : "#0f1825", opacity: hasThreats ? 0.18 : 0.5, lineHeight: 1 }}>
+                      {riskScore}
+                    </div>
+
+                    {/* Count badge */}
+                    {hasThreats && (
+                      <div style={{ position: "absolute", top: 7, right: 8, background: `${cs.glow}25`, border: `1px solid ${cs.glow}40`, borderRadius: 10, padding: "1px 7px", fontFamily: "'Share Tech Mono', monospace", fontSize: 11, fontWeight: 700, color: cs.glow, lineHeight: 1.4 }}>
+                        {cellThreats.length}
+                      </div>
+                    )}
+
+                    {/* Threat list */}
+                    {hasThreats ? (
+                      <>
+                        {cellThreats.slice(0, isExpanded ? 99 : 3).map(t => (
+                          <div key={t.id}
+                            onClick={e => { e.stopPropagation(); onSelectThreat(t); }}
+                            style={{ fontSize: 11, color: cs.glow, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, lineHeight: 1.25, letterSpacing: 0.3, paddingRight: 22,
+                              transition: "opacity 0.12s", cursor: "pointer" }}
+                            onMouseEnter={e => e.currentTarget.style.opacity = "0.75"}
+                            onMouseLeave={e => e.currentTarget.style.opacity = "1"}>
+                            {t.title}
+                          </div>
+                        ))}
+                        {!isExpanded && cellThreats.length > 3 && (
+                          <div style={{ fontSize: 10, color: "#3a4a60", fontFamily: "'Share Tech Mono', monospace", marginTop: 2 }}>
+                            +{cellThreats.length - 3} more — click to expand
+                          </div>
+                        )}
+                        {isExpanded && (
+                          <div style={{ fontSize: 9, color: "#3a4a60", fontFamily: "'Share Tech Mono', monospace", marginTop: 4, borderTop: `1px solid ${cs.glow}20`, paddingTop: 4 }}>
+                            CLICK THREAT TO INSPECT · CLICK CELL TO COLLAPSE
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <div style={{ width: 4, height: 4, borderRadius: "50%", background: "#0f1825" }} />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+
           {/* X axis label */}
-          <div style={{ textAlign: "center", marginTop: 8, fontSize: 10, color: "#3a4a60", fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: 2 }}>
-            IMPACT →
+          <div style={{ display: "grid", gridTemplateColumns: "110px 1fr", gap: 5, marginTop: 4 }}>
+            <div />
+            <div style={{ textAlign: "center" }}>
+              <span style={{ fontSize: 9, color: "#2a3a55", fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: 3 }}>IMPACT →</span>
+            </div>
           </div>
         </div>
       </div>
 
-      {tooltip && (
-        <div className="tooltip" style={{ position: "fixed", top: tooltip.y + 12, left: tooltip.x + 12 }}>
-          {tooltip.threats.map(t => (
-            <div key={t.id} style={{ marginBottom: 4, color: SEVERITY_CONFIG[t.severity].color }}>◈ {t.title}</div>
-          ))}
-        </div>
-      )}
+      {/* Summary stats */}
+      <div style={{ marginTop: 24, display: "flex", gap: 10, flexWrap: "wrap" }}>
+        {[
+          { label: "CRITICAL RISK ZONE (≥20)", color: "#ff3355", count: filteredThreats.filter(t => { const r = THREAT_RISK[t.id] || {l:3,i:3}; return r.l * r.i >= 20; }).length },
+          { label: "HIGH RISK ZONE (≥9)", color: "#ff8833", count: filteredThreats.filter(t => { const r = THREAT_RISK[t.id] || {l:3,i:3}; return r.l * r.i >= 9 && r.l * r.i < 20; }).length },
+          { label: "MEDIUM RISK ZONE (≥5)", color: "#ffcc00", count: filteredThreats.filter(t => { const r = THREAT_RISK[t.id] || {l:3,i:3}; return r.l * r.i >= 5 && r.l * r.i < 9; }).length },
+          { label: "LOW RISK ZONE (<5)", color: "#33aaff", count: filteredThreats.filter(t => { const r = THREAT_RISK[t.id] || {l:3,i:3}; return r.l * r.i < 5; }).length },
+        ].map(({ label, color, count }) => count > 0 && (
+          <div key={label} style={{ padding: "6px 14px", background: `${color}0d`, border: `1px solid ${color}25`, borderRadius: 3, display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ width: 8, height: 8, borderRadius: 1, background: color, opacity: 0.8 }} />
+            <span style={{ fontSize: 10, color: "#4a6080", fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: 1 }}>{label}</span>
+            <span style={{ fontSize: 14, color, fontFamily: "'Share Tech Mono', monospace", fontWeight: 700 }}>{count}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
