@@ -186,7 +186,7 @@
   <script type="text/babel">
 const { useState, useMemo, useCallback, useRef, useEffect } = React;
 
-// ─── DATA ──────────────────────────────────────────────────────────────────
+// --- DATA ---
 
 const CATEGORIES = [
   { id: "all", label: "All Threats", icon: "◈" },
@@ -230,56 +230,41 @@ const CAT_COLORS = {
 // Likelihood: how frequently seen in the wild across M365 environments
 // Impact:     blast radius if successfully executed (data loss, tenant control, fraud)
 const THREAT_RISK = {
-  // ── Identity & Account ──────────────────────────────────────────
-  "uac":                      { l: 5, i: 5 }, // Most common vector AND full tenant risk if admin account
-  "aad-recon":                { l: 4, i: 2 }, // Very common post-compromise; low direct impact on its own
-  "hybrid-identity-attack":   { l: 2, i: 5 }, // Requires on-prem foothold first; catastrophic if achieved
-  "impossible-travel-bypass": { l: 3, i: 2 }, // Evasion technique, not a standalone attack; low direct impact
-  "service-principal-abuse":  { l: 3, i: 4 }, // Leaked secrets common; app-level perms = broad data access
-
-  // ── Email / BEC ──────────────────────────────────────────────────
-  "bec-internal":             { l: 4, i: 5 }, // Very common; direct financial fraud + deep internal trust abuse
-  "bec-external":             { l: 3, i: 5 }, // Slightly less frequent but high financial impact
-  "bec-inbox-rules":          { l: 5, i: 4 }, // Extremely common post-compromise step; enables ongoing BEC
-  "email-rules":              { l: 4, i: 3 }, // Common; medium impact — enables monitoring but not direct fraud alone
-  "teams-phishing":           { l: 4, i: 3 }, // Growing rapidly; bypasses email controls
-
-  // ── Authentication ───────────────────────────────────────────────
-  "aitm":                     { l: 4, i: 5 }, // Commodity kits (EvilProxy); defeats MFA entirely
-  "token-theft":              { l: 4, i: 5 }, // Very common via infostealer; full session access, MFA bypassed
-  "mfa-fatigue":              { l: 4, i: 4 }, // Well-documented; effective against push MFA without number match
-  "device-code-phishing":     { l: 3, i: 3 }, // Targeted; moderate frequency and impact
-  "legacy-auth":              { l: 3, i: 3 }, // Declining (MSFT deprecated) but still exploited in some tenants
-
-  // ── Access Control ───────────────────────────────────────────────
-  "cap-gaps":                 { l: 4, i: 4 }, // Misconfigs are pervasive; a gap enables full MFA bypass
-
-  // ── Application Abuse ────────────────────────────────────────────
-  "app-registration":         { l: 3, i: 4 }, // Targeted attack; survives password reset
-  "abnormal-useragent":       { l: 3, i: 2 }, // Indicator/recon tool; impact depends on what follows
-  "illicit-consent":          { l: 4, i: 4 }, // Phishing campaigns common; persistent delegated access
-  "power-platform-abuse":     { l: 3, i: 4 }, // Overlooked surface; data egress via flows is hard to detect
-
-  // ── Persistence ──────────────────────────────────────────────────
-  "persistence-federated":    { l: 2, i: 5 }, // Rare but used by nation-state actors (SolarWinds); total control
-  "guest-account-abuse":      { l: 3, i: 2 }, // Common oversight; limited impact unless added to privileged groups
-  "ghost-device":             { l: 3, i: 3 }, // Moderate frequency; enables CAP bypass and PRT abuse
-  "pim-abuse":                { l: 2, i: 5 }, // Requires eligible role + compromise; devastating if achieved
-  "exchange-transport-rule":  { l: 2, i: 5 }, // Rare but org-wide email interception = catastrophic
-
-  // ── Exfiltration ─────────────────────────────────────────────────
-  "exfil-graph":              { l: 3, i: 4 }, // Common post-compromise step; silent bulk data theft
-  "copilot-abuse":            { l: 3, i: 3 }, // Emerging; growing as Copilot adoption increases
-  "sharepoint-ransomware":    { l: 2, i: 4 }, // Less frequent; high impact — potential data loss with no recovery
-
-  // ── Privilege Escalation ─────────────────────────────────────────
-  "privesc-role":             { l: 3, i: 5 }, // Common attacker goal; Global Admin = complete tenant control
+  "uac":                      { l: 5, i: 5 },
+  "aad-recon":                { l: 4, i: 2 },
+  "hybrid-identity-attack":   { l: 2, i: 5 },
+  "impossible-travel-bypass": { l: 3, i: 2 },
+  "service-principal-abuse":  { l: 3, i: 4 },
+  "bec-internal":             { l: 4, i: 5 },
+  "bec-external":             { l: 3, i: 5 },
+  "bec-inbox-rules":          { l: 5, i: 4 },
+  "email-rules":              { l: 4, i: 3 },
+  "teams-phishing":           { l: 4, i: 3 },
+  "aitm":                     { l: 4, i: 5 },
+  "token-theft":              { l: 4, i: 5 },
+  "mfa-fatigue":              { l: 4, i: 4 },
+  "device-code-phishing":     { l: 3, i: 3 },
+  "legacy-auth":              { l: 3, i: 3 },
+  "cap-gaps":                 { l: 4, i: 4 },
+  "app-registration":         { l: 3, i: 4 },
+  "abnormal-useragent":       { l: 3, i: 2 },
+  "illicit-consent":          { l: 4, i: 4 },
+  "power-platform-abuse":     { l: 3, i: 4 },
+  "persistence-federated":    { l: 2, i: 5 },
+  "guest-account-abuse":      { l: 3, i: 2 },
+  "ghost-device":             { l: 3, i: 3 },
+  "pim-abuse":                { l: 2, i: 5 },
+  "exchange-transport-rule":  { l: 2, i: 5 },
+  "exfil-graph":              { l: 3, i: 4 },
+  "copilot-abuse":            { l: 3, i: 3 },
+  "sharepoint-ransomware":    { l: 2, i: 4 },
+  "privesc-role":             { l: 3, i: 5 },
 };
 
-// ─── THREAT DATA ────────────────────────────────────────────────────────────
+// --- THREAT DATA ---
 
 const threats = [
-  // ── ORIGINAL THREATS ──────────────────────────────────────
+  // --- ORIGINAL THREATS ---
   {
     id: "uac",
     title: "User Account Compromise",
@@ -2151,7 +2136,7 @@ CloudAppEvents
     },
   },
 
-  // ── NEW THREATS ───────────────────────────────────────────────────────────
+  // --- NEW THREATS ---
 
   {
     id: "teams-phishing",
@@ -2959,7 +2944,7 @@ SigninLogs
   },
 ];
 
-// ─── COMPONENTS ─────────────────────────────────────────────────────────────
+// --- COMPONENTS ---
 
 function SectionLabel({ children, color = "#3a4a60" }) {
   return (
@@ -3001,7 +2986,7 @@ function CopyButton({ text }) {
   );
 }
 
-// ─── RUNBOOK TAB ─────────────────────────────────────────────────────────────
+// --- RUNBOOK TAB ---
 
 function RunbookTab({ runbook, implemented, onToggle }) {
   if (!runbook) return (
@@ -3071,7 +3056,7 @@ function RunbookTab({ runbook, implemented, onToggle }) {
   );
 }
 
-// ─── HEAT MAP VIEW ───────────────────────────────────────────────────────────
+// --- HEAT MAP VIEW ---
 
 function HeatMapView({ threats: filteredThreats, onSelectThreat }) {
   const [expandedCell, setExpandedCell] = useState(null); // key of expanded cell
@@ -3270,7 +3255,7 @@ function HeatMapView({ threats: filteredThreats, onSelectThreat }) {
   );
 }
 
-// ─── TABLE VIEW ──────────────────────────────────────────────────────────────
+// --- TABLE VIEW ---
 
 function TableView({ threats: filteredThreats, onSelectThreat, selectedId }) {
   return (
@@ -3303,7 +3288,7 @@ function TableView({ threats: filteredThreats, onSelectThreat, selectedId }) {
   );
 }
 
-// ─── ATTACK CHAIN VIEW ───────────────────────────────────────────────────────
+// --- ATTACK CHAIN VIEW ---
 
 const ATTACK_CHAINS = [
   {
@@ -3378,7 +3363,7 @@ function AttackChainView({ onSelectThreat }) {
   );
 }
 
-// ─── DETAIL PANEL ────────────────────────────────────────────────────────────
+// --- DETAIL PANEL ---
 
 function DetailPanel({ threat, onClose }) {
   const [activeTab, setActiveTab] = useState("overview");
@@ -3532,7 +3517,7 @@ function DetailPanel({ threat, onClose }) {
   );
 }
 
-// ─── MAIN APP ─────────────────────────────────────────────────────────────────
+// --- MAIN APP ---
 
 function ThreatMap() {
   const [selectedThreat, setSelectedThreat] = useState(null);
@@ -3581,7 +3566,7 @@ function ThreatMap() {
   return (
     <div style={{ fontFamily: "'IBM Plex Mono', monospace", background: "#050810", color: "#c9d8f0", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
 
-      {/* ── HEADER ── */}
+      {/* HEADER */}
       <div style={{ background: "#07090f", borderBottom: "1px solid #111c2e", padding: "0 20px", display: "flex", alignItems: "center", justifyContent: "space-between", minHeight: 62, flexShrink: 0, position: "relative", overflow: "hidden" }}>
         {/* Background grid lines */}
         <div style={{ position: "absolute", inset: 0, backgroundImage: "linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px)", backgroundSize: "40px 40px", pointerEvents: "none" }} />
@@ -3620,7 +3605,7 @@ function ThreatMap() {
 
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
 
-        {/* ── SIDEBAR ── */}
+        {/* SIDEBAR */}
         <div style={{ width: sidebarCollapsed ? 42 : 210, background: "#07090f", borderRight: "1px solid #111c2e", flexShrink: 0, overflowY: "auto", overflowX: "hidden", transition: "width 0.2s ease", display: "flex", flexDirection: "column" }}>
           {/* Collapse Button */}
           <button className="sidebar-collapse-btn" onClick={() => setSidebarCollapsed(!sidebarCollapsed)} style={{ width: "100%", padding: "10px", background: "none", border: "none", borderBottom: "1px solid #111c2e", color: "#3a4a60", display: "flex", alignItems: "center", justifyContent: sidebarCollapsed ? "center" : "flex-end", gap: 6 }}>
@@ -3692,7 +3677,7 @@ function ThreatMap() {
           )}
         </div>
 
-        {/* ── MAIN CONTENT ── */}
+        {/* MAIN CONTENT */}
         <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", gap: 16, minWidth: 0 }}>
 
           {/* Left panel */}
@@ -3766,7 +3751,7 @@ function ThreatMap() {
         </div>
       </div>
 
-      {/* ── FOOTER ── */}
+      {/* FOOTER */}
       <div style={{ background: "#07090f", borderTop: "1px solid #111c2e", padding: "6px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
         <span style={{ fontSize: 9, color: "#1e2d45", fontFamily: "'Share Tech Mono', monospace", letterSpacing: 1.5 }}>
           MITRE ATT&CK® FOR ENTERPRISE · AZURE THREAT RESEARCH MATRIX (MSTIC) · MICROSOFT ENTRA ID
