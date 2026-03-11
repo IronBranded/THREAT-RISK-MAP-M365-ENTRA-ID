@@ -6,12 +6,14 @@ A practical, interactive reference for DFIR investigators and security analysts 
 
 ## Usage
 
-Download `m365-dfir-threat-map.html` and open it in any browser. No install, no dependencies, no server required.
+ <h3 align="center">
+  <a href="https://ironbranded.github.io/Microsoft-Defensive-Cloud-Atlas/" target="_blank" rel="noopener noreferrer">
+    👉 🟢 NAVIGATE THE MAP 🟢
+  </a>
+</h3>
 
-**OR** run it directly:
-👉 [https://ironbranded.github.io/THREAT-RISK-MAP-M365-ENTRA-ID/](https://ironbranded.github.io/THREAT-RISK-MAP-M365-ENTRA-ID/)
 
----
+* P.S: You can also download the index.html and use it locally.
 
 ## What's Inside
 
