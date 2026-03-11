@@ -7,7 +7,7 @@ A practical, interactive reference for DFIR investigators and security analysts 
 ## Usage
 
  <h3 align="center">
-  <a href="https://ironbranded.github.io/Microsoft-Defensive-Cloud-Atlas/" target="_blank" rel="noopener noreferrer">
+  <a href="https://ironbranded.github.io/THREAT-RISK-MAP-M365-ENTRA-ID/" target="_blank" rel="noopener noreferrer">
     👉 🟢 NAVIGATE THE MAP 🟢
   </a>
 </h3>
