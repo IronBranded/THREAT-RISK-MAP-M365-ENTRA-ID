@@ -12,8 +12,9 @@ A practical, interactive reference for DFIR investigators and security analysts 
   </a>
 </h3>
 
+#####
 
-* P.S: You can also download the index.html and use it locally.
+P.S: You can also download the index.html and use it locally.
 
 ## What's Inside
 
