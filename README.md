@@ -107,8 +107,7 @@ Queries target **Microsoft Sentinel**. Ensure the following connectors are enabl
 - [Azure Threat Research Matrix (MSTIC)](https://microsoft.github.io/Azure-Threat-Research-Matrix/)
 - [Microsoft Entra ID Attack & Defense Playbook](https://github.com/Cloud-Architekt/AzureAD-Attack-Defense)
 - [Microsoft Incident Response Playbooks](https://learn.microsoft.com/en-us/security/operations/incident-response-playbooks)
-- [CISA — Microsoft 365 Security Best Practices](https://www.cisa.gov/resources-tools/resources/secure-cloud-business-applications-scuba-project)
-
+- [CISA — Microsoft 365 Security Auditing (ScubaGear) tool](https://github.com/cisagov/ScubaGear/blob/main/README.md)
 ---
 
 > For defensive and incident response use only.
