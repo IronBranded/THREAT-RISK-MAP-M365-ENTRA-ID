@@ -324,39 +324,40 @@ SigninLogs
     ],
     runbook: {
       triage: [
-        "Identify affected UPN and IP address from alert",
-        "Check SigninLogs: confirm volume, timing, source ASN",
-        "Verify if any successful logins occurred from the offending IP",
-        "Check if MFA was satisfied — if so, escalate to token theft playbook",
-        "Determine if account has admin roles or access to sensitive data",
+        "Determine affected UPN, source IP, ASN, and sign-in time from alert",
+        "Check SigninLogs: was sign-in successful? Was MFA satisfied or bypassed?",
+        "Determine if account has admin roles, privileged access, or access to sensitive data",
+        "Check for any post-compromise activity: new rules, app consents, role changes",
+        "Classify severity: standard user vs. privileged account — escalate immediately if admin",
       ],
       investigate: [
-        "Pull all sign-in activity for the account in last 30 days",
-        "Review audit log for any config changes post-login",
-        "Check for new inbox rules, forwarding rules, or app consents",
-        "Identify all resources accessed in the compromised session",
-        "Enumerate group memberships and roles of the affected account",
+        "Pull full sign-in history for account in last 30 days — identify anomalous IPs/locations",
+        "Review AuditLogs for all changes made by account in the incident window",
+        "Check for inbox rule creation, forwarding rules, or auto-reply modifications",
+        "Identify all devices and apps the account has authenticated to",
+        "Determine initial compromise vector: phishing, password spray, leaked credential",
       ],
       contain: [
+        "Disable account in Entra ID immediately: Set-AzureADUser -AccountEnabled $false",
+        "Reset password to a complex random value — do NOT reuse or share over email",
         "Revoke all active sessions: Revoke-AzureADUserAllRefreshTokens -ObjectId <UPN>",
-        "Disable account in Entra ID immediately",
-        "Reset password to complex random value",
-        "Remove any newly-created inbox rules or forwarding rules",
+        "Remove any malicious inbox rules, forwarding rules, or MFA method additions",
         "Block source IP in Named Locations CAP or firewall",
-        "Enable Entra ID Identity Protection block policy for risky users",
+        "Activate Risky User block policy in Entra ID Identity Protection",
       ],
       recover: [
-        "Re-enable account only after MFA method verified with user",
-        "Require MFA re-registration if MFA methods were changed",
-        "Review and re-issue any tokens or app consents granted during compromise",
-        "Document timeline and notify affected teams",
-        "Update CAP to enforce higher-assurance authentication for role",
+        "Re-enable account only after credential reset and MFA re-enrollment confirmed",
+        "Require phishing-resistant MFA (FIDO2 or certificate-based) before restoring access",
+        "Review and confirm all account settings, delegates, and send-as permissions",
+        "Re-validate all devices associated with account via Intune compliance check",
+        "Notify user via alternate channel (phone/in-person) — not email",
       ],
       escalate: [
-        "Admin or privileged account compromised → immediate IR escalation",
-        "Evidence of lateral movement or data access",
-        "Multiple accounts compromised from same campaign",
-        "Attacker achieved persistence (new app, guest account, federation change)",
+        "Escalate if account has admin roles, Global Reader or above",
+        "Escalate if post-compromise persistence is found (apps, devices, federation changes)",
+        "Escalate if any financial fraud or data exfiltration is suspected",
+        "Engage Microsoft DART if scope exceeds internal IR capability",
+        "Notify legal/compliance if PII or regulated data was accessed",
       ],
     },
   },
@@ -414,38 +415,40 @@ CloudAppEvents
     ],
     runbook: {
       triage: [
-        "Identify compromised mailbox and any suspicious sent/deleted items",
-        "Check for inbox rules created in last 7 days (CloudAppEvents)",
-        "Review MessageTrace for anomalous outbound volume or recipients",
-        "Confirm whether any wire transfer or HR change requests were sent",
-        "Escalate to Finance/HR immediately if fraud may have occurred",
+        "Identify compromised mailbox and review sent items and deleted items folders",
+        "Check CloudAppEvents for inbox rules created in last 7 days",
+        "Run MessageTrace to identify anomalous outbound volume, recipients, or domains",
+        "Confirm whether any wire transfer, payroll change, or vendor redirect requests were sent",
+        "Escalate to Finance and HR immediately if fraud may have occurred",
       ],
       investigate: [
-        "Export all inbox rules: Get-InboxRule -Mailbox <UPN>",
-        "Review Unified Audit Log for all mailbox actions in window",
-        "Identify all internal recipients of suspicious emails",
-        "Check if replies were suppressed by deletion rules",
-        "Review Graph API activity for Mail.Send/Mail.ReadWrite calls",
+        "Pull all emails sent from the compromised account in the incident window",
+        "Identify all internal and external recipients of potentially fraudulent emails",
+        "Determine how long the account was compromised before detection",
+        "Check for any forwarding rules that may have siphoned replies",
+        "Review whether the attacker accessed HR or Finance systems via compromised mailbox",
       ],
       contain: [
-        "Disable account and revoke sessions immediately",
-        "Remove all malicious inbox rules: Remove-InboxRule",
-        "Notify Finance/HR to halt any pending wire transfers or payroll changes",
-        "Alert IT helpdesk — attacker may pivot to target them next",
-        "Block external forwarding: Set-RemoteDomain -AutoForwardEnabled $false",
+        "Disable account in Entra ID immediately: Set-AzureADUser -AccountEnabled $false",
+        "Reset password and revoke all sessions: Revoke-AzureADUserAllRefreshTokens",
+        "Remove all malicious inbox rules: Get-InboxRule | Remove-InboxRule",
+        "Disable external forwarding tenant-wide: Set-RemoteDomain -AutoForwardEnabled ",
+        "Notify Finance and HR to freeze any pending wire transfers or payroll changes",
+        "Alert IT helpdesk — attacker may pivot to social-engineer other staff",
       ],
       recover: [
-        "Notify all internal recipients of BEC emails",
-        "Reverse any payroll or banking changes made under attacker influence",
-        "Engage finance to verify any transfers in flight",
-        "Document all evidence for potential law enforcement referral",
-        "Re-enable account after MFA verification and password reset",
+        "Send corrective communications to all external parties who received fraudulent emails",
+        "Coordinate with Finance to reverse any fraudulent transfers (contact bank immediately)",
+        "Re-enable account with phishing-resistant MFA only after full credential reset",
+        "Audit all mailbox delegates, send-as permissions, and calendar sharing",
+        "Conduct user awareness training before restoring full access",
       ],
       escalate: [
-        "Wire transfer > $10k may have already been processed → contact bank immediately",
-        "Multiple employees received and acted on fraudulent requests",
-        "Attacker still has active access via forwarding rule not yet discovered",
-        "Indicators of larger campaign beyond single mailbox",
+        "Escalate immediately if any financial transfer has occurred",
+        "Notify legal and compliance if customer or partner data was disclosed",
+        "Engage Microsoft DART or external DFIR if scope is large",
+        "File FBI IC3 report if wire fraud is confirmed",
+        "Notify cyber insurance carrier per policy requirements",
       ],
     },
   },
@@ -484,17 +487,34 @@ CloudAppEvents
       { phase: "Collection", technique: "Email Collection for Targeting" },
       { phase: "Exfiltration", technique: "Transfer via Email" },
     ],
-    kql: `// External BEC: suspicious outbound to new recipient domains
-EmailEvents
-| where EmailDirection == "Outbound"
-| summarize Count = count() by RecipientDomain, SenderFromAddress
+    kql: `// External BEC: first-seen outbound recipient domains
+// Sentinel: requires Office 365 connector (OfficeActivity)
+OfficeActivity
+| where Operation == "Send"
+| where TimeGenerated > ago(7d)
+| extend RecipientDomains = tostring(parse_json(tostring(
+    parse_json(ExternalAccess))).RecipientDomain)
+| where isnotempty(RecipientDomains)
+| summarize RecentCount = count() by UserId, RecipientDomains
 | join kind=leftanti (
-    EmailEvents
-    | where TimeGenerated < ago(30d)
-    | summarize by RecipientDomain
-) on RecipientDomain
-| where Count > 3
-| order by Count desc`,
+    OfficeActivity
+    | where Operation == "Send"
+    | where TimeGenerated between (ago(90d) .. ago(7d))
+    | summarize by UserId, RecipientDomains
+) on UserId, RecipientDomains
+| where RecentCount > 2
+| order by RecentCount desc
+
+// Defender XDR Advanced Hunting (EmailEvents available natively)
+// EmailEvents
+// | where EmailDirection == "Outbound"
+// | where TimeGenerated > ago(7d)
+// | summarize Count = count() by RecipientEmailDomain, SenderFromAddress
+// | join kind=leftanti (
+//     EmailEvents | where TimeGenerated < ago(30d)
+//     | summarize by RecipientEmailDomain
+// ) on RecipientEmailDomain
+// | where Count > 2`,
     mitigations: [
       "Enable DMARC/DKIM/SPF enforcement",
       "Alert on Reply-To header mismatch",
@@ -504,36 +524,40 @@ EmailEvents
     ],
     runbook: {
       triage: [
-        "Identify external parties who received suspicious emails",
-        "Determine if any payment redirection messages were sent",
-        "Check lookalike domain registrations via WHOIS for your domain",
-        "Contact affected external vendors/partners immediately",
-        "Confirm if any payments have been sent to attacker accounts",
+        "Identify all external parties who received fraudulent emails from spoofed/lookalike domain",
+        "Determine if any payment redirection messages were sent and to whom",
+        "Check for lookalike domain registrations via WHOIS — identify attacker infrastructure",
+        "Contact affected vendors and partners immediately via phone — not email",
+        "Confirm if any payments have already been sent to attacker-controlled accounts",
       ],
       investigate: [
-        "Pull MessageTrace for all outbound from compromised account",
-        "Review Reply-To and Return-Path headers of suspicious emails",
-        "Identify inbox monitoring window — how long was attacker reading mail?",
-        "Check for lookalike domain registration timing vs. compromise date",
-        "Coordinate with vendors to obtain full email headers for forensics",
+        "Obtain full headers of fraudulent emails to identify sending infrastructure",
+        "Determine how long lookalike domain has been in use",
+        "Identify all internal accounts referenced or impersonated in fraud emails",
+        "Check if any attacker-controlled email accounts communicated with internal staff",
+        "Review for any internal email rules that may be forwarding replies to attacker",
       ],
       contain: [
-        "Disable account and revoke sessions",
-        "Send corrective notification to all external recipients",
-        "Issue official advisory on your correct banking/payment details",
-        "Request external mail providers to quarantine fraudulent lookalike domain emails",
-        "Work with registrar to suspend attacker lookalike domain",
+        "Report lookalike domain to registrar and hosting provider for takedown",
+        "Block lookalike domain in Defender for Office 365 tenant allow/block list",
+        "Disable any compromised internal accounts involved and revoke their sessions",
+        "Reset passwords for any accounts referenced in fraud emails as precaution",
+        "Send official corrective advisory to all external parties with verified contact details",
+        "Issue official confirmed payment details via authenticated phone call — not email",
       ],
       recover: [
-        "File report with FBI IC3 and/or local law enforcement",
-        "Engage cyber insurance carrier",
-        "Issue official communications to affected vendors with new payment verification process",
-        "Implement callback verification for all wire transfers going forward",
+        "Work with Finance to initiate bank recall procedures for any fraudulent transfers",
+        "Engage legal counsel for potential liability with affected external parties",
+        "Implement DMARC/DKIM/SPF enforcement to prevent domain spoofing",
+        "Enable anti-impersonation policies in Defender for Office 365",
+        "Monitor for additional lookalike domain registrations post-incident",
       ],
       escalate: [
-        "Confirmed financial loss → immediate executive and legal notification",
-        "Funds transferred within 24h → contact FBI for financial fraud recovery (limited window)",
-        "Multiple external partners affected → broad vendor advisory required",
+        "Escalate immediately if any wire transfer has been completed",
+        "Contact FBI IC3 and local law enforcement if financial fraud is confirmed",
+        "Notify cyber insurance carrier and legal counsel",
+        "Engage executive leadership if reputational damage to external relationships is significant",
+        "Involve Microsoft DART if internal compromise is suspected as the source",
       ],
     },
   },
@@ -594,36 +618,40 @@ AADNonInteractiveUserSignInLogs
     ],
     runbook: {
       triage: [
-        "Identify session ID with IP mismatch in SigninLogs",
-        "Confirm token was issued to one IP but replayed from another",
-        "Determine which resources were accessed with replayed token",
-        "Check if device compliance CAP was bypassed",
-        "Identify originating sign-in method (was MFA satisfied?)",
+        "Identify IP mismatch between token issuance and subsequent API use in SigninLogs",
+        "Confirm token was issued via legitimate MFA sign-in but replayed from attacker IP",
+        "Determine which resources were accessed with the replayed token",
+        "Check if device compliance CAP or CAE would have caught the replay",
+        "Assess whether infostealer malware on endpoint is the likely theft vector",
       ],
       investigate: [
-        "Correlate SigninLogs with AADNonInteractiveUserSignInLogs for same session",
-        "Review MicrosoftGraphActivityLogs for API calls post-replay",
-        "Identify if new devices, apps, or MFA methods were registered",
-        "Trace back to initial compromise vector (AiTM, infostealer, consent grant)",
-        "Enumerate all resources accessed in the stolen session window",
+        "Pull all API and resource access events during the stolen session window",
+        "Identify data accessed: mailbox, OneDrive, SharePoint, Teams, Graph API",
+        "Determine if any persistence was established: new apps, inbox rules, MFA methods",
+        "Check endpoint telemetry for signs of infostealer (Redline, Raccoon, etc.)",
+        "Identify all other sessions from the same source IP across the tenant",
       ],
       contain: [
-        "Immediately revoke all refresh tokens: Revoke-AzureADUserAllRefreshTokens",
-        "Enable CAE and token protection if not already active",
-        "Disable account pending verification",
-        "Remove any devices, apps, or MFA methods registered in the window",
-        "Activate risky user block policy in Identity Protection",
+        "Disable account immediately: Set-AzureADUser -AccountEnabled $false",
+        "Reset password to invalidate any credential-based refresh",
+        "Revoke all refresh tokens: Revoke-AzureADUserAllRefreshTokens -ObjectId <UPN>",
+        "Remove any newly registered MFA methods, devices, or app consents added by attacker",
+        "Enable Continuous Access Evaluation (CAE) and token protection policy if not active",
+        "Block source IP in Named Locations",
       ],
       recover: [
-        "Re-enable only after phishing-resistant MFA (FIDO2) is enrolled",
-        "Rotate any secrets or credentials the attacker may have accessed",
-        "Audit all sensitive resources accessed during token replay window",
-        "Notify data owners of any accessed information",
+        "Enable CAE and sign-in frequency CAP (require re-auth every 1 hour for sensitive apps)",
+        "Require re-enrollment with phishing-resistant MFA (FIDO2 or CBA)",
+        "Remediate endpoint if infostealer malware confirmed — wipe and re-image",
+        "Enroll device in Intune and enforce device compliance before restoring access",
+        "Re-enable account only after endpoint is clean and MFA is re-enrolled",
       ],
       escalate: [
-        "Replayed token used to create persistent backdoor (app, guest, federation)",
-        "Privileged account token stolen",
-        "Bulk data exfiltration via Graph API during replay window",
+        "Escalate if privileged account token was stolen (admin, service principal)",
+        "Escalate if infostealer malware found — indicates broader endpoint compromise",
+        "Engage endpoint IR team if malware is confirmed",
+        "Escalate if access to regulated data (PII, financial, health) is confirmed",
+        "Notify legal/compliance if data exfiltration cannot be ruled out",
       ],
     },
   },
@@ -686,36 +714,40 @@ SigninLogs
     ],
     runbook: {
       triage: [
-        "Confirm AiTM pattern: MFA-satisfied sign-in followed by rapid token use from different IP",
-        "Identify the phishing URL used — check email headers or user report",
-        "Determine how many users clicked the same phishing link",
-        "Confirm scope: is this targeted (spearphish) or mass campaign?",
-        "Check threat intelligence for the proxy IP/domain",
+        "Confirm AiTM pattern: MFA-satisfied sign-in followed immediately by token use from different IP",
+        "Identify the phishing URL used — obtain from email headers, browser history, or user report",
+        "Determine how many users clicked the same phishing link (run IoC search in email platform)",
+        "Confirm if this is a targeted spearphish or mass campaign",
+        "Check threat intelligence for proxy IP, domain, and phishing kit attribution",
       ],
       investigate: [
-        "Pull all sign-ins in past 7 days for affected user(s)",
-        "Identify all activity in the stolen session window (Graph, Exchange, SharePoint)",
-        "Check for any persistence actions: new app, device, inbox rule, MFA change",
-        "Identify phishing infrastructure: hosting provider, registrar, lookalike domain",
-        "Correlate with email logs — who sent the phishing link?",
+        "Identify all resources and data accessed in the stolen session window",
+        "Determine if any persistence was established during the stolen session",
+        "Pull all emails sent, rules created, and apps consented during the window",
+        "Identify the phishing kit infrastructure (EvilProxy, Tycoon, etc.) from URL patterns",
+        "Correlate: were other users from the same phishing email also compromised?",
       ],
       contain: [
-        "Revoke all sessions for affected accounts immediately",
-        "Reset passwords and require FIDO2/phishing-resistant MFA re-enrollment",
-        "Block phishing domain in Defender for Office 365 / tenant allow-block list",
-        "Remove any post-compromise persistence (apps, inbox rules, devices)",
-        "Brief IT helpdesk — social engineering follow-up likely",
+        "Disable all affected accounts immediately: Set-AzureADUser -AccountEnabled $false",
+        "Reset passwords for all confirmed and suspected victims",
+        "Revoke all sessions: Revoke-AzureADUserAllRefreshTokens for all affected accounts",
+        "Block the phishing domain in Defender for Office 365 tenant allow/block list",
+        "Remove any post-compromise persistence: apps, inbox rules, registered devices",
+        "Block source proxy IPs in Named Locations",
       ],
       recover: [
-        "Migrate all affected users to FIDO2 / Windows Hello for Business",
-        "Deploy Conditional Access token protection",
-        "Issue user communication about the phishing campaign",
-        "Review Safe Links policy — ensure the phishing URL would be blocked in future",
+        "Require re-enrollment with phishing-resistant MFA (FIDO2 or CBA) — push MFA insufficient",
+        "Enable token protection policy in CAP to bind tokens to device",
+        "Re-enable accounts only after phishing-resistant MFA is enrolled",
+        "Brief IT helpdesk — social engineering follow-up calls are common post-AiTM",
+        "Deploy Anti-Phishing policies with user impersonation protection in Defender for Office 365",
       ],
       escalate: [
-        "Campaign targeting multiple users → organization-wide advisory",
-        "Admin account captured by AiTM → critical IR escalation",
-        "Phishing infrastructure still active and targeting other employees",
+        "Escalate if admin accounts are confirmed compromised",
+        "Escalate if mass campaign — notify all users in blast radius",
+        "Engage Microsoft DART if phishing kit is novel or scope is large",
+        "Notify legal/compliance if customer data was accessed",
+        "Consider tenant-wide revocation if scope cannot be contained",
       ],
     },
   },
@@ -775,36 +807,39 @@ SigninLogs
     ],
     runbook: {
       triage: [
-        "Identify which CAP gap was exploited (legacy auth, location, exclusion)",
-        "Determine if the gap was intentional or misconfiguration",
-        "Assess which accounts and resources were accessible via the gap",
-        "Check if the gap was recently introduced (CAP change audit log)",
+        "Identify the specific CAP gap exploited: legacy auth, location exclusion, user exclusion, or report-only",
+        "Determine if the gap was intentional (service account) or an accidental misconfiguration",
+        "Assess which accounts exploited the gap and what resources they accessed",
+        "Check AuditLogs for recent CAP changes that may have introduced the gap",
         "Determine if the gap is still active and being actively exploited",
       ],
       investigate: [
-        "Export full CAP configuration: Get-AzureADMSConditionalAccessPolicy",
-        "Review audit log for all CAP modifications in last 90 days",
-        "Identify all sign-ins that went through the gap (Not Applied result)",
-        "Review exclusion lists for stale or unauthorized accounts",
-        "Map all apps/resources not covered by any CAP policy",
+        "Review all sign-ins that bypassed intended CAP controls in the window",
+        "Identify data accessed by accounts that exploited the gap",
+        "Determine if the gap was discovered via external attack or internal misconfiguration",
+        "Review all CAP changes in the last 90 days for unintended consequences",
+        "Assess whether any accounts in the exclusion list are over-privileged",
       ],
       contain: [
-        "Immediately close the identified gap (enable enforcement, remove exclusion)",
-        "Revoke sessions for all accounts that used the gap",
-        "Switch report-only CAPs to enforcement mode after validation",
-        "Remove unauthorized CAP exclusions",
-        "Block legacy auth tenant-wide if not already done",
+        "Immediately close the identified gap: enable enforcement, remove exclusion, or convert report-only to enforced",
+        "Disable any accounts found actively exploiting the gap pending investigation",
+        "Reset passwords for accounts that authenticated via the gap from suspicious IPs",
+        "Revoke sessions for all accounts that used the gap: Revoke-AzureADUserAllRefreshTokens",
+        "Block legacy auth tenant-wide if gap involved legacy protocol bypass",
+        "Remove unauthorized exclusions from all CAPs immediately",
       ],
       recover: [
-        "Document all CAP changes with business justification",
-        "Implement CAP change review process with security sign-off",
-        "Schedule quarterly CAP exclusion review",
-        "Deploy Entra ID Identity Protection as additional safety net",
+        "Validate CAP change in report-only mode before switching to enforcement",
+        "Re-enable excluded accounts only with explicit business justification documented",
+        "Implement CAP change management process with mandatory review before deployment",
+        "Enable CAP insights and reporting dashboard for ongoing monitoring",
+        "Schedule monthly CAP review to catch policy drift",
       ],
       escalate: [
-        "Privileged account exploited the gap",
-        "CAP was deliberately modified by attacker — indicates prior compromise",
-        "Gap has been open for extended period with evidence of ongoing abuse",
+        "Escalate if admin accounts exploited the gap",
+        "Escalate if gap was present for more than 30 days — scope of exposure is significant",
+        "Escalate if evidence of deliberate misconfiguration (insider threat possibility)",
+        "Notify compliance team if the gap allowed MFA bypass for regulated data access",
       ],
     },
   },
@@ -861,34 +896,39 @@ SigninLogs
     ],
     runbook: {
       triage: [
-        "Identify which legacy protocol was used and by which account",
-        "Determine if this is an expected app/service or malicious activity",
-        "Check if credentials may have been compromised via spray or phishing",
-        "Assess mailbox access: were emails read, forwarded, or deleted?",
-        "Identify all accounts still using legacy auth in tenant",
+        "Identify the legacy protocol used (SMTP AUTH, IMAP, POP3, Basic Auth) and the account",
+        "Determine if this is an expected service/app or unknown malicious activity",
+        "Check if successful authentication occurred and what was accessed",
+        "Identify all accounts still using legacy auth in the tenant",
+        "Assess mailbox content accessed: sensitive emails, calendar data, contacts",
       ],
       investigate: [
-        "Pull SigninLogs for legacy auth usage across all users in 30 days",
-        "Identify originating IP and ASN for legacy auth sign-ins",
-        "Review Exchange audit logs for mailbox operations post-auth",
-        "Enumerate all apps/services legitimately requiring legacy auth",
-        "Check for password spray pattern: same IP, many accounts, legacy protocol",
+        "Pull all legacy auth sign-ins from the same source IP across the tenant",
+        "Determine if credentials were obtained via spray attack or phishing",
+        "Identify all data accessed via the legacy protocol session",
+        "Check for any email rule creation or modification post-compromise",
+        "Correlate with any MFA bypass — legacy auth inherently bypasses MFA",
       ],
       contain: [
-        "Revoke sessions for affected accounts",
-        "Disable SMTP AUTH per-mailbox: Set-CASMailbox -SmtpClientAuthenticationDisabled $true",
-        "Enforce legacy auth block CAP immediately",
-        "Reset passwords for all accounts successfully authenticated via legacy auth from suspicious IPs",
+        "Disable account if compromise is confirmed: Set-AzureADUser -AccountEnabled $false",
+        "Reset password immediately for all accounts successfully authenticated via suspicious IPs",
+        "Revoke all sessions: Revoke-AzureADUserAllRefreshTokens",
+        "Disable SMTP AUTH per-mailbox: Set-CASMailbox -SmtpClientAuthenticationDisabled ",
+        "Enforce legacy auth block CAP immediately for all users and apps",
+        "Block source IP in Named Locations",
       ],
       recover: [
-        "Migrate all legitimate legacy auth users to modern auth equivalents",
-        "Document any business-justified legacy auth exceptions with review date",
-        "Implement monitoring alert for any future legacy auth sign-ins",
+        "Migrate all legitimate services using legacy auth to modern auth (OAuth 2.0)",
+        "Re-enable accounts only after legacy auth is blocked and passwords reset",
+        "Enable Entra ID sign-in logs alert for any future legacy auth attempts",
+        "Review and update mail clients and services to support modern authentication",
+        "Verify no remaining service accounts depend on legacy auth before blocking tenant-wide",
       ],
       escalate: [
-        "Evidence of successful credential spray via legacy auth targeting many accounts",
-        "Privileged account accessed via legacy auth from external IP",
-        "Data exfiltration via IMAP/EWS bulk download",
+        "Escalate if admin accounts authenticated via legacy auth",
+        "Escalate if legacy auth was used to access sensitive mailboxes (executives, finance, HR)",
+        "Escalate if legacy auth block cannot be enforced due to critical app dependency",
+        "Notify compliance if regulated data was accessed",
       ],
     },
   },
@@ -947,36 +987,39 @@ SigninLogs
     ],
     runbook: {
       triage: [
-        "Identify the user agent, source IP, and account involved",
-        "Determine if this is a known internal automation/service or unknown tool",
-        "Check if the tool is a known offensive tool (AADInternals, ROADtools, etc.)",
-        "Assess volume and scope of API calls made",
-        "Identify if credentials were compromised or if this is authorized testing",
+        "Identify the user agent string, source IP, account, and app targeted",
+        "Determine if this is a known offensive tool (AADInternals, ROADtools, MicroBurst)",
+        "Assess if this is authorized red team, pentesting, or unauthorized activity",
+        "Determine what API calls were made and what data was accessed or enumerated",
+        "Check if the account credentials are confirmed compromised or if this is recon only",
       ],
       investigate: [
-        "Review full API call history for the user agent in MicrosoftGraphActivityLogs",
-        "Identify all endpoints accessed: /users, /groups, /mail, /files",
-        "Correlate source IP with threat intelligence",
-        "Check for corresponding sign-in events (interactive vs non-interactive)",
-        "Determine if service principal or delegated credentials were used",
+        "Pull all API calls from the source IP across the tenant in the window",
+        "Identify all objects enumerated: users, groups, apps, roles, devices",
+        "Determine if enumeration preceded any follow-on attack (privilege escalation, phishing)",
+        "Check if the tool output (e.g. AzureHound JSON) was exfiltrated",
+        "Correlate with any subsequent suspicious sign-ins or privilege changes",
       ],
       contain: [
-        "Block source IP in Named Locations CAP",
-        "Revoke tokens for the affected account/service principal",
-        "Rotate service principal credentials if compromised",
-        "Implement user-agent based alert in MDCA",
-        "Enable Graph API throttling for suspicious patterns",
+        "Block source IP in Named Locations CAP immediately",
+        "Disable account if credentials were confirmed stolen or tool was run with valid session",
+        "Reset password if account compromise is confirmed",
+        "Revoke all tokens for the affected account or service principal",
+        "Rotate service principal credentials if a service identity was abused",
+        "Implement MDCA policy alerting on known offensive tool user agents",
       ],
       recover: [
-        "Document all data accessed via the unauthorized API calls",
-        "Rotate any credentials that may have been enumerated",
-        "Review Graph API permissions for least-privilege",
-        "Implement MDCA app governance for API monitoring",
+        "Enable sign-in logs alerting for known offensive tool user agent strings",
+        "Implement Graph API throttling and anomaly detection via MDCA",
+        "Review and reduce Graph API permissions for all service principals",
+        "Re-enable account only after credentials are fully rotated",
+        "Block known offensive tool user agents at reverse proxy or WAF if applicable",
       ],
       escalate: [
-        "Recognized offensive tool (AADInternals, AzureHound) confirmed in use",
-        "Mass data exfiltration via API calls",
-        "Compromised service principal with broad permissions",
+        "Escalate if tool was authenticated with a privileged account or service principal",
+        "Escalate if BloodHound/AzureHound data was exfiltrated — attack path analysis likely underway",
+        "Escalate if no authorized red team activity was scheduled",
+        "Engage threat intelligence team to assess follow-on attack likelihood",
       ],
     },
   },
@@ -1041,36 +1084,39 @@ AuditLogs
     ],
     runbook: {
       triage: [
-        "Identify the newly registered app and who registered it",
-        "Review permissions granted to the app",
-        "Determine if the app is internally registered or external (multi-tenant)",
-        "Check if the registering account is expected to register apps",
-        "Assess whether any users have consented to the app",
+        "Identify the newly registered app: display name, app ID, and registering account",
+        "Review all permissions requested (application vs. delegated) and whether admin consent was granted",
+        "Determine if the registering account is expected to register apps",
+        "Check if the app is single-tenant (internal) or multi-tenant (external)",
+        "Assess if any users have already consented to the app",
       ],
       investigate: [
-        "Review full app manifest and permissions in Entra ID portal",
-        "Identify all users who have consented to the app",
-        "Review Graph API activity logs for the app's client ID",
-        "Check if app secret/cert was added close to registration time",
-        "Determine if app is accessing data beyond what's expected",
+        "Pull all API calls and data access events using this app ID",
+        "Identify all users who consented to the app and what permissions were granted",
+        "Determine what data the app has accessed since registration",
+        "Check if the app has credentials (secrets/certs) that would persist after password reset",
+        "Review registering account for other suspicious activity",
       ],
       contain: [
-        "Disable the malicious application in Entra ID",
-        "Revoke all consent grants: Remove-AzureADOAuth2PermissionGrant",
-        "Rotate credentials for any accounts the app accessed",
-        "Remove app from enterprise applications",
-        "Alert all users who consented to re-evaluate",
+        "Disable the malicious application in Entra ID: Set-AzureADApplication -AccountEnabled $false",
+        "Revoke all OAuth2 consent grants: Remove-AzureADOAuth2PermissionGrant",
+        "Delete any credentials (secrets, certificates) added to the app",
+        "Disable the registering account if compromise is confirmed: Set-AzureADUser -AccountEnabled $false",
+        "Reset password and revoke sessions for registering account",
+        "Remove app from Enterprise Applications entirely",
       ],
       recover: [
-        "Enable admin consent workflow to prevent recurrence",
-        "Review and restrict app registration permissions",
-        "Audit all enterprise apps for suspicious permissions",
-        "Implement MDCA app governance policies",
+        "Re-enable account only after credential reset and investigation complete",
+        "Require admin consent workflow — disable user consent for app registrations",
+        "Implement app registration restriction to authorized developer accounts only",
+        "Alert all users who consented to the malicious app to review their account activity",
+        "Enable periodic app consent review via Entra ID access reviews",
       ],
       escalate: [
-        "App had Directory.ReadWrite.All or RoleManagement permissions",
-        "App accessed mailboxes or files of privileged users",
-        "Evidence of supply chain compromise in legitimate app update",
+        "Escalate if app was granted high-privilege permissions (Mail.ReadWrite, Files.ReadWrite.All)",
+        "Escalate if app persisted after account password reset — credentials on app survive reset",
+        "Notify compliance if app accessed sensitive or regulated data",
+        "Escalate if app was registered by a service principal rather than a user",
       ],
     },
   },
@@ -1126,35 +1172,39 @@ SigninLogs
     ],
     runbook: {
       triage: [
-        "Identify affected user and count of push notifications sent",
-        "Confirm if user approved any of the pushes",
-        "Contact user directly (phone/in-person) to verify awareness",
-        "Check if MFA Fraud Alert was triggered by user",
-        "Assess if attacker already has valid credentials (spray or phishing)",
+        "Identify affected user and total count of MFA push notifications sent",
+        "Confirm if user approved any of the pushes — check SigninLogs ResultType",
+        "Contact user immediately via phone or in-person — NOT email or Teams",
+        "Check if MFA Fraud Alert was triggered by the user",
+        "Determine if attacker already has valid credentials via spray or phishing",
       ],
       investigate: [
-        "Pull all sign-in attempts for user in last 24h with ResultType codes",
-        "Identify source IP(s) triggering the push flood",
-        "Determine how attacker obtained valid password",
-        "Check for any approved sign-ins in the push window",
-        "Review post-auth activity if any push was approved",
+        "Pull all sign-in attempts for the account in the window",
+        "Determine the credential compromise vector (phishing, spray, leaked credential)",
+        "If a push was approved: identify all post-compromise activity immediately",
+        "Check for inbox rules, forwarding rules, or app consents created post-approval",
+        "Identify source IP and whether it matches known attack infrastructure",
       ],
       contain: [
-        "Revoke sessions if any push was approved",
-        "Reset password immediately",
-        "Temporarily disable account if bombing is ongoing",
+        "Disable account immediately if any push was approved: Set-AzureADUser -AccountEnabled $false",
+        "Reset password even if no push was approved — credentials are confirmed in attacker hands",
+        "Revoke all active sessions: Revoke-AzureADUserAllRefreshTokens -ObjectId <UPN>",
+        "Remove any malicious inbox rules, MFA methods, or app consents added during window",
         "Block source IP in Named Locations",
-        "Enable Fraud Alert reporting in MFA settings",
+        "Enable MFA Fraud Alert and require number matching on all push MFA policies",
       ],
       recover: [
-        "Enroll user in FIDO2 / Windows Hello as primary MFA",
-        "Enforce Number Matching and Additional Context for remaining push users",
-        "Brief user on recognizing social engineering follow-up calls",
+        "Re-enroll user with phishing-resistant MFA (FIDO2 or CBA) — push MFA insufficient post-fatigue",
+        "Enable number matching and additional context in Microsoft Authenticator settings",
+        "Re-enable account only after phishing-resistant MFA is enrolled and credentials reset",
+        "Brief user on MFA fatigue attacks and correct response (deny + report)",
+        "Consider deploying FIDO2 keys for high-value accounts",
       ],
       escalate: [
-        "User approved a push → treat as full account compromise",
-        "Multiple users targeted in coordinated push bombing campaign",
-        "Social engineering call confirmed alongside push bombing",
+        "Escalate if user approved a push — treat as full account compromise",
+        "Escalate if admin account was targeted",
+        "Escalate if mass fatigue attack across multiple users detected",
+        "Engage security awareness team for targeted user education",
       ],
     },
   },
@@ -1204,35 +1254,39 @@ SigninLogs
     ],
     runbook: {
       triage: [
-        "Identify user and confirm device code flow in SigninLogs",
-        "Determine app the token was issued to",
-        "Assess scope: what permissions did the token carry?",
-        "Check post-auth activity with the stolen token",
-        "Identify phishing vector: email, Teams, SMS?",
+        "Identify the user, device code used, and the app the token was issued to",
+        "Determine the phishing vector: email, Teams message, SMS, or voice call",
+        "Assess the token scope — what permissions did the issued token carry?",
+        "Check if the token has been used post-issuance from unexpected IP",
+        "Determine how long ago the device code was issued and if it is still valid",
       ],
       investigate: [
-        "Pull all activity using the client app/token in Graph activity logs",
-        "Identify IP address using the stolen refresh token",
-        "Check for persistence actions in post-auth window",
-        "Review original phishing message content if available",
-        "Correlate with any other accounts who received similar phishing",
+        "Pull all API calls and resource access using the stolen token",
+        "Identify what data was accessed: mailbox, OneDrive, Teams, Graph API",
+        "Check for persistence: inbox rules, app registrations, new MFA methods",
+        "Identify all other users who may have received the same phishing lure",
+        "Determine if the attacker accessed the tenant admin portal with the stolen token",
       ],
       contain: [
-        "Revoke all refresh tokens for affected account",
-        "Reset password",
-        "Block device code flow via CAP auth flow policy immediately",
-        "Block source IP",
-        "Remove any persistence established with stolen token",
+        "Disable account immediately: Set-AzureADUser -AccountEnabled $false",
+        "Reset password to invalidate credential-based refresh",
+        "Revoke all refresh tokens: Revoke-AzureADUserAllRefreshTokens -ObjectId <UPN>",
+        "Block device code authentication flow via CAP authentication flow policy",
+        "Block source IP in Named Locations",
+        "Remove any persistence established with the stolen token",
       ],
       recover: [
-        "Enable CAP auth flows policy blocking device code",
-        "Issue user awareness communication about device code phishing",
-        "Review all device code sign-ins in past 30 days for additional victims",
+        "Re-enable account only after token revocation confirmed and MFA re-enrolled",
+        "Require phishing-resistant MFA re-enrollment (FIDO2 or CBA)",
+        "Enable CAP policy to restrict or block device code flow for all non-device users",
+        "Deploy user awareness training on device code phishing scenarios",
+        "Monitor for renewed phishing attempts targeting the same user base",
       ],
       escalate: [
-        "Token used to access privileged resources or admin APIs",
-        "Multiple victims identified from same phishing campaign",
-        "Evidence of long-running persistent access via refresh token",
+        "Escalate if privileged account token was stolen",
+        "Escalate if token was used to access admin center or perform privileged operations",
+        "Escalate if mass phishing campaign targeting multiple users",
+        "Notify legal/compliance if sensitive data was accessed",
       ],
     },
   },
@@ -1287,38 +1341,40 @@ AuditLogs
     ],
     runbook: {
       triage: [
-        "Confirm federation change in audit log — identify who made the change",
-        "Verify if the change was authorized via change management records",
-        "Identify if the MSOL/AADConnect account was involved",
-        "Check for SAML sign-ins from unexpected issuers post-change",
-        "Assess scope: how many sign-ins occurred via forged SAML?",
+        "Confirm federation change in AuditLogs — identify exactly who made the change and when",
+        "Verify if change was authorized via change management records",
+        "Identify if the AADConnect MSOL account or sync service account was involved",
+        "Check for SAML sign-ins from unexpected issuers following the change",
+        "Treat this as a critical incident — Golden SAML enables total persistent tenant access",
       ],
       investigate: [
-        "Pull all sign-ins using SAML authentication after change timestamp",
-        "Identify accounts signed in via forged SAML tokens",
-        "Check ADFS/on-prem environment for indicators of compromise",
-        "Review AADConnect sync account activity",
-        "Determine if on-premises domain controllers were compromised",
+        "Identify all SAML-based sign-ins that occurred after the federation change",
+        "Determine which accounts signed in via forged SAML tokens",
+        "Assess all privileged operations performed via forged SAML sessions",
+        "Investigate on-premises ADFS and AADConnect servers for compromise indicators",
+        "Identify how attacker obtained ADFS token signing certificate",
       ],
       contain: [
-        "Immediately revert federation settings to managed authentication",
-        "Revoke all sessions for all accounts",
-        "Disable AADConnect MSOL account",
-        "Rotate AADConnect service account credentials",
-        "Engage on-premises IR team for ADFS/DC investigation",
+        "Revert federation settings immediately: convert domain back to managed authentication",
+        "Disable the AADConnect MSOL account in Entra ID",
+        "Disable all accounts confirmed to have used forged SAML tokens",
+        "Reset passwords for all accounts that may have been modified by MSOL account",
+        "Revoke all sessions tenant-wide: consider tenant-level token revocation",
+        "Isolate AADConnect server and on-premises ADFS servers from network",
       ],
       recover: [
-        "Full tenant-wide password reset required",
-        "Re-register MFA methods for all users",
-        "Audit all privileged role assignments made during window",
-        "Consider temporary tenant lockdown during recovery",
-        "Engage Microsoft DART for Golden SAML recovery assistance",
+        "Rotate ADFS token signing certificate before re-enabling federation",
+        "Re-enable accounts in priority order after credential reset and investigation complete",
+        "Deploy cloud-only authentication (Entra ID native) for privileged accounts",
+        "Implement Privileged Access Workstations for all admin activity",
+        "Engage on-premises IR team — treat domain controllers as potentially compromised",
       ],
       escalate: [
-        "IMMEDIATE: This is a tier-1 critical incident requiring full IR team activation",
-        "Notify executive leadership and legal",
-        "Consider engaging Microsoft DART and/or external IR firm",
-        "Preserve all forensic evidence before remediation",
+        "This is an automatic P1 — engage Microsoft DART immediately",
+        "Notify executive leadership and legal counsel",
+        "Notify relevant regulatory bodies if regulated data was accessed",
+        "This attack pattern is associated with nation-state actors — consider threat intel engagement",
+        "Consider full tenant rebuild if scope of compromise cannot be bounded",
       ],
     },
   },
@@ -1370,35 +1426,39 @@ AuditLogs
     ],
     runbook: {
       triage: [
-        "Identify newly created guest account and who invited it",
-        "Verify if invitation was authorized",
-        "Review group memberships and resource access of the guest account",
-        "Check sign-in history of the guest account",
-        "Assess if guest was added to any privileged groups or roles",
+        "Identify the guest account, who invited it, and when it was created",
+        "Verify if the invitation was authorized by the business owner",
+        "Review all groups, roles, and SharePoint sites the guest was added to",
+        "Check sign-in history and activity of the guest account",
+        "Assess if the guest was added to any privileged groups or sensitive resources",
       ],
       investigate: [
-        "Pull all activity by the guest account since creation",
-        "Review resources accessed by the guest",
-        "Identify if guest bypassed CAP policies scoped to members",
-        "Check external domain for threat intelligence context",
-        "Review inviting user's account for signs of compromise",
+        "Pull all resource access by the guest account since creation",
+        "Identify all internal users who collaborated with or were targeted by the guest",
+        "Determine if the guest account is controlled by an attacker or a compromised partner",
+        "Check if the inviting internal account was itself compromised",
+        "Assess what data the guest account accessed or downloaded",
       ],
       contain: [
-        "Disable guest account immediately",
-        "Remove from all groups and role assignments",
-        "Revoke all active sessions",
-        "Review and restrict who can send guest invitations",
+        "Disable guest account immediately: Set-AzureADUser -AccountEnabled $false",
+        "Revoke all active sessions for the guest account",
+        "Remove guest from all groups, roles, and SharePoint site memberships",
+        "Disable the internal account that sent the invitation if compromise is suspected",
+        "Reset password and revoke sessions for the inviting account",
+        "Restrict guest invitation permissions to Global Admin only pending policy review",
       ],
       recover: [
-        "Remove guest account entirely after forensic preservation",
-        "Restrict guest invite permissions to admins via Entra ID settings",
-        "Implement access reviews for all existing guest accounts",
-        "Review external collaboration settings and cross-tenant access policies",
+        "Re-enable legitimate guest accounts only after access review and revalidation",
+        "Implement Entra ID Access Reviews for all guest accounts on a quarterly basis",
+        "Restrict guest invitation to specific internal roles via External Collaboration Settings",
+        "Enable guest access expiry policies to auto-expire unused guest accounts",
+        "Review and tighten guest access permissions across SharePoint and Teams",
       ],
       escalate: [
-        "Guest account was added to privileged role or group",
-        "Guest account accessed sensitive data or made configuration changes",
-        "Evidence that inviting user's account was compromised",
+        "Escalate if guest account was added to privileged groups or admin roles",
+        "Escalate if significant data exfiltration by guest account is suspected",
+        "Escalate if inviting internal account is confirmed compromised",
+        "Notify compliance if guest accessed regulated or sensitive data",
       ],
     },
   },
@@ -1457,36 +1517,40 @@ AuditLogs
     ],
     runbook: {
       triage: [
-        "Identify role assigned, to whom, and by whom",
-        "Verify if assignment was authorized and has change management record",
-        "Assess all actions taken by account with elevated role",
-        "Check if role assignment is permanent or time-bounded (PIM)",
-        "Identify all other recent privileged role changes in tenant",
+        "Identify which role was assigned, to which account, and by which admin",
+        "Verify if the assignment is authorized via change management or PIM approval records",
+        "Assess all actions performed by the account with the elevated role",
+        "Check if the role assignment is permanent or time-bounded (PIM eligible vs. active)",
+        "Identify all other privileged role changes in the last 24–72 hours",
       ],
       investigate: [
-        "Pull all audit events by the elevated account after role assignment",
-        "Identify any backdoors or persistence established with elevated access",
-        "Review account that granted the role for signs of compromise",
-        "Check for other unauthorized role assignments in same window",
-        "Assess blast radius: what could have been done with this role?",
+        "Pull AuditLogs for all operations performed by the account during the elevated window",
+        "Identify any new admin accounts created, credentials added, or policies modified",
+        "Check if the attacker used the role to add persistence (new app, federation change)",
+        "Determine the initial compromise vector that enabled the role assignment",
+        "Assess full blast radius: what could this role access?",
       ],
       contain: [
-        "Remove unauthorized role assignment immediately",
-        "Revoke all sessions for the affected account",
-        "If Global Admin role: initiate full tenant audit",
-        "Disable account pending investigation",
-        "Review and lock down all privileged role assignments",
+        "Remove the unauthorized role assignment immediately in Entra ID",
+        "Disable the account that performed the unauthorized assignment if compromised",
+        "Disable the account that received the unauthorized role if it performed malicious actions",
+        "Reset passwords for both the assigning and receiving accounts",
+        "Revoke all sessions for both accounts: Revoke-AzureADUserAllRefreshTokens",
+        "If Global Admin role was granted: initiate full tenant-level audit immediately",
       ],
       recover: [
-        "Implement PIM for all privileged roles if not done",
-        "Require justification and approval for all role activations",
-        "Conduct full tenant health check for persistence mechanisms",
-        "Reset credentials for all privileged accounts as precaution",
+        "Re-enable accounts only after investigation complete and credentials fully reset",
+        "Implement PIM for all privileged roles — eliminate permanent assignments",
+        "Require MFA + approval for all PIM role activations at Global Admin level",
+        "Enable Privileged Identity Management alerts for suspicious activations",
+        "Review and validate all current privileged role assignments via Entra ID access review",
       ],
       escalate: [
-        "Global Admin role granted to unknown account → critical incident",
-        "Evidence of subsequent privileged operations (config changes, new accounts)",
-        "Multiple unauthorized role assignments — suggests coordinated attack",
+        "Escalate immediately if Global Admin, Exchange Admin, or Security Admin role was granted",
+        "Escalate if any changes were made to CAPs, federation, or other security controls",
+        "Engage Microsoft DART if scope of admin actions cannot be bounded",
+        "Notify legal/compliance if privileged access was used to access regulated data",
+        "This is an automatic P1 if Global Admin was granted to an unauthorized account",
       ],
     },
   },
@@ -1529,14 +1593,30 @@ AuditLogs
       { phase: "Discovery", technique: "Tenant Data Enumeration via Graph" },
     ],
     kql: `// Bulk Graph API access pattern detection
+// Sentinel: requires Entra ID Diagnostic Settings -> MicrosoftGraphActivityLogs
+// Enable: Entra admin center > Diagnostic settings > Add MicrosoftGraphActivityLogs
 MicrosoftGraphActivityLogs
-| where RequestUri has "/messages" or RequestUri has "/driveItems"
-| summarize CallCount = count() by UserId, bin(TimeGenerated, 1h), ClientAppId
+| where TimeGenerated > ago(1d)
+| where RequestUri has_any ("/messages", "/driveItems", "/files", "/attachments")
+| where RequestMethod == "GET"
+| summarize CallCount = count(), DistinctUris = dcount(RequestUri)
+  by UserId, ClientAppId, bin(TimeGenerated, 1h)
 | where CallCount > 500
 | join kind=leftouter (
-    SigninLogs | project UserId = UserId, UPN = UserPrincipalName
+    SigninLogs
+    | where TimeGenerated > ago(1d)
+    | summarize by UserId, UserPrincipalName
 ) on UserId
-| project TimeGenerated, UPN, CallCount, ClientAppId`,
+| project TimeGenerated, UserPrincipalName, CallCount, DistinctUris, ClientAppId
+
+// Fallback: SharePoint/OneDrive bulk access via OfficeActivity
+// (use if MicrosoftGraphActivityLogs not yet enabled)
+// OfficeActivity
+// | where Operation in ("FileDownloaded","FileAccessed","FileSyncDownloadedFull")
+// | summarize FileCount = count(), Sites = dcount(SiteUrl)
+//   by UserId, bin(TimeGenerated, 1h)
+// | where FileCount > 200
+// | order by FileCount desc`,
     mitigations: [
       "Enable Microsoft Graph Activity Logs (Entra ID diagnostic settings)",
       "Implement MDCA policies for bulk download detection",
@@ -1546,36 +1626,40 @@ MicrosoftGraphActivityLogs
     ],
     runbook: {
       triage: [
-        "Identify account and volume of Graph API calls",
-        "Determine which endpoints were accessed (/messages, /driveItems, etc.)",
-        "Assess volume of data potentially exfiltrated",
-        "Confirm if this is authorized automation or malicious activity",
-        "Identify destination IP/service receiving the exfiltrated data",
+        "Identify the account or service principal making bulk Graph API calls",
+        "Determine which endpoints were accessed (/messages, /driveItems, /files, /chats)",
+        "Estimate data volume: call count × endpoint payload size",
+        "Confirm if this is authorized automation, a legitimate app, or malicious activity",
+        "Identify the destination IP receiving the exfiltrated data",
       ],
       investigate: [
-        "Pull full MicrosoftGraphActivityLogs for the account/client app",
-        "Correlate Graph API calls with SharePoint/OneDrive file access audit",
-        "Identify specific files and emails accessed",
-        "Determine if sensitivity labels were applied to accessed data",
-        "Check for DLP policy hits that may have been suppressed",
+        "Pull full MicrosoftGraphActivityLogs for the account in the window (if available)",
+        "Identify all resource types accessed and estimate total data exposed",
+        "Determine if a specific dataset was targeted (executives, finance, HR, IP)",
+        "Check if the Graph access followed a credential compromise or illicit consent grant",
+        "Identify if a malicious app or service principal was the exfiltration vehicle",
       ],
       contain: [
-        "Revoke tokens for affected account/service principal",
-        "Block client app ID in Entra ID",
-        "Enable Graph API throttling for the account",
-        "Restrict app permissions to least-privilege immediately",
-        "Enable MDCA bulk download alert policy",
+        "Disable account or service principal immediately",
+        "Reset password if a user account: Set-AzureADUser -AccountEnabled $false",
+        "Revoke all sessions and tokens: Revoke-AzureADUserAllRefreshTokens",
+        "Block the client app ID used for bulk access in Entra ID",
+        "Revoke all OAuth2 consent grants associated with the malicious app",
+        "Restrict Graph API access via CAP: require compliant device and low sign-in risk",
       ],
       recover: [
-        "Notify data owners of potentially exfiltrated information",
-        "Classify accessed data sensitivity for breach notification assessment",
-        "Engage legal/privacy team for regulatory notification review",
-        "Enable Graph Activity Logs and MDCA monitoring if not active",
+        "Re-enable account only after full investigation and credential reset",
+        "Enable MicrosoftGraphActivityLogs via Entra Diagnostic Settings if not already active",
+        "Implement MDCA policy for bulk download detection and auto-session revocation",
+        "Restrict app permissions to least-privilege — remove unused Graph API scopes",
+        "Require admin consent workflow for all future app Graph API permission grants",
       ],
       escalate: [
-        "Sensitive/regulated data confirmed as accessed (PII, financial, health)",
-        "Volume exceeds 10,000 records — may trigger breach notification thresholds",
-        "Ongoing exfiltration via persistent app/token not yet revoked",
+        "Escalate immediately — data exfiltration is a P1 incident",
+        "Notify legal and privacy team: data breach notification obligations may apply",
+        "Engage forensics if volume of data exfiltrated is significant",
+        "Notify regulatory bodies if PII, financial, or health data was exfiltrated",
+        "Engage Microsoft DART if exfiltration was via a sophisticated persistent mechanism",
       ],
     },
   },
@@ -1633,35 +1717,39 @@ CloudAppEvents
     ],
     runbook: {
       triage: [
-        "Identify the rule, its conditions and actions",
-        "Determine how long the rule has been active",
-        "Identify what data has been forwarded or deleted",
-        "Check if security notification rules were deleted (high severity)",
-        "Identify all other rules on the mailbox",
+        "Identify the rule, its trigger conditions, and its action (forward, delete, move, redirect)",
+        "Determine when the rule was created and how long it has been active",
+        "Assess what data has been forwarded or deleted while the rule was active",
+        "Check if security notification emails (alerts, IT, compliance) were suppressed by deletion rules",
+        "Identify all other inbox rules on the mailbox — check for companion rules",
       ],
       investigate: [
-        "Export all inbox rules: Get-InboxRule -Mailbox <UPN>",
-        "Review MessageTrace to identify forwarded messages",
-        "Determine what security alerts were suppressed by deletion rules",
-        "Assess if other mailboxes have similar rules (campaign)",
-        "Check transport rules for org-wide forwarding",
+        "Pull full email traffic via MessageTrace for the period the rule was active",
+        "Identify destination of forwarded emails — external domain or attacker-controlled inbox",
+        "Determine what sensitive data was contained in forwarded or deleted emails",
+        "Check for additional mailbox compromise indicators: sent items, delegates, send-as",
+        "Correlate with sign-in logs for the account during the same window",
       ],
       contain: [
-        "Remove malicious rules: Remove-InboxRule -Identity <rule>",
-        "Disable external auto-forwarding: Set-RemoteDomain -AutoForwardEnabled $false",
-        "Revoke account sessions and reset password",
-        "Alert recipient of forwarded emails if known",
+        "Disable account immediately if compromise is confirmed: Set-AzureADUser -AccountEnabled $false",
+        "Reset password: do not allow attacker to use same credentials to recreate rules",
+        "Revoke all sessions: Revoke-AzureADUserAllRefreshTokens -ObjectId <UPN>",
+        "Remove all malicious rules: Get-InboxRule -Mailbox <UPN> | Remove-InboxRule",
+        "Disable external auto-forwarding tenant-wide: Set-RemoteDomain -AutoForwardEnabled ",
+        "Alert known recipients of forwarded emails if identity is known",
       ],
       recover: [
-        "Review all inbox rules across organization for similar patterns",
-        "Implement MDCA alert for new inbox rules",
-        "Block external forwarding at transport layer as preventive measure",
-        "Notify affected users and data owners",
+        "Re-enable account only after credentials reset and all rules reviewed",
+        "Enable anti-forwarding policy in Exchange Online (block outbound auto-forward)",
+        "Enable Exchange admin alert for inbox rule creation in Defender for Office 365",
+        "Implement MDCA policy for suspicious inbox rule creation with auto-remediation",
+        "Conduct user awareness training on email rule manipulation",
       ],
       escalate: [
-        "Rule was actively forwarding to external attacker for weeks/months",
-        "Security alert suppression rule allowed attacker to remain undetected",
-        "Transport rule found affecting all users — requires immediate org-wide response",
+        "Escalate if security alert emails were deleted or suppressed by the rule",
+        "Escalate if executive or finance mailbox was targeted",
+        "Escalate if forwarding was active for more than 7 days — significant data exposure",
+        "Notify compliance if regulated data was forwarded externally",
       ],
     },
   },
@@ -1702,11 +1790,21 @@ CloudAppEvents
       { phase: "Discovery", technique: "Service Principal Discovery" },
       { phase: "Reconnaissance", technique: "Tenant Configuration Analysis" },
     ],
-    kql: `// Recon tool detection via audit and sign-in logs
+    kql: `// Recon tool detection via Entra ID Sign-in logs
+// Sentinel: Entra ID connector (SigninLogs, AADNonInteractiveUserSignInLogs)
 union SigninLogs, AADNonInteractiveUserSignInLogs
+| where TimeGenerated > ago(7d)
 | where UserAgent has_any ("AADInternals","AzureHound","ROADtools",
-    "MicroBurst","o365spray","MailSniper","Ruler")
-| project TimeGenerated, UserPrincipalName, IPAddress, UserAgent, AppDisplayName`,
+    "MicroBurst","o365spray","MailSniper","Ruler","TokenTactics")
+| project TimeGenerated, UserPrincipalName, IPAddress, UserAgent, AppDisplayName, ResultType
+
+// High-volume /users enumeration via Graph Activity Logs
+// Requires: Entra Diagnostic Settings -> MicrosoftGraphActivityLogs
+// MicrosoftGraphActivityLogs
+// | where TimeGenerated > ago(1d)
+// | where RequestUri has "/users" and RequestMethod == "GET"
+// | summarize Count = count() by IPAddress, bin(TimeGenerated, 10m)
+// | where Count > 100`,
     mitigations: [
       "Block known recon tool user agents at WAF/proxy",
       "Enable Entra ID Identity Protection for anomalous token usage",
@@ -1716,35 +1814,39 @@ union SigninLogs, AADNonInteractiveUserSignInLogs
     ],
     runbook: {
       triage: [
-        "Identify tool and scope of enumeration (authenticated vs unauthenticated)",
-        "Determine which credentials were used if authenticated",
-        "Assess what data was collected (users, groups, apps, roles)",
-        "Determine if this is a pentest/red team or unauthorized activity",
-        "Check for follow-on activity suggesting escalation is imminent",
+        "Identify tool used, source IP, and account (authenticated vs. unauthenticated recon)",
+        "Determine if this is authorized red team or pentesting activity",
+        "Assess scope of enumeration: users, groups, roles, apps, trusts, service principals",
+        "Check for follow-on activity: sign-in attempts, privilege escalation, phishing",
+        "Prioritize if authenticated — attacker has valid credentials and is mapping attack paths",
       ],
       investigate: [
-        "Pull all Graph API calls from the source IP in the window",
-        "Identify all tenant objects enumerated",
-        "Determine if enumeration preceded an attack (timing correlation)",
-        "Check for AzureHound output being used in BloodHound for path analysis",
-        "Correlate with any subsequent privilege escalation attempts",
+        "Pull all Graph API and sign-in events from the source IP across the tenant",
+        "Identify all tenant objects that were enumerated",
+        "Determine if AzureHound or BloodHound data was successfully collected and exfiltrated",
+        "Correlate timing with any subsequent attack (phishing, spray, privilege escalation)",
+        "Identify if enumeration targeted specific high-value accounts or paths",
       ],
       contain: [
-        "Block source IP immediately",
-        "Revoke tokens for any accounts used in enumeration",
-        "Implement Graph API throttling for suspicious patterns",
+        "Block source IP immediately in Named Locations CAP",
+        "Disable account if authenticated credentials were used: Set-AzureADUser -AccountEnabled $false",
+        "Reset password for any accounts confirmed used in authenticated recon",
+        "Revoke tokens for any accounts or service principals used",
+        "Rotate service principal credentials if a service identity was abused",
         "Enable MDCA mass enumeration detection policy",
       ],
       recover: [
-        "Assume attacker has full picture of your tenant topology",
-        "Prioritize hardening attack paths identified by tools like AzureHound",
-        "Review privileged account exposure — reduce blast radius",
-        "Implement Just Enough Access (JEA) for all admin roles",
+        "Re-enable accounts after credential rotation and investigation complete",
+        "Implement Graph API sign-in log alerting for known offensive tool user agents",
+        "Enable Entra ID Identity Protection risk policies if not already in enforcement mode",
+        "Restrict user and group enumeration permissions via App Consent policies",
+        "Review and reduce over-permissioned service principals that could be abused for recon",
       ],
       escalate: [
-        "Enumeration followed by privilege escalation attempt",
-        "Known attacker tool confirmed (AzureHound, AADInternals)",
-        "Evidence that enumeration data was exfiltrated for external analysis",
+        "Escalate if BloodHound/AzureHound data was successfully exfiltrated — attack planning is underway",
+        "Escalate if authenticated recon used a privileged account",
+        "Escalate if recon precedes a confirmed breach event (treat as pre-breach indicator)",
+        "Engage threat intelligence team to assess attacker TTP and likely next step",
       ],
     },
   },
@@ -1788,22 +1890,30 @@ union SigninLogs, AADNonInteractiveUserSignInLogs
       { phase: "Exfiltration", technique: "Copilot-Facilitated Sensitive Data Extraction" },
       { phase: "Discovery", technique: "Tenant-Wide Resource Discovery via Copilot Prompts" },
     ],
-    kql: `// Copilot audit events — requires Microsoft Purview / UAL ingestion
+    kql: `// Copilot interaction audit
+// Sentinel: requires Office 365 connector + Microsoft Purview Copilot audit enabled
+// Enable: Microsoft Purview > Audit > Search > Filter by RecordType = CopilotInteraction
 OfficeActivity
-| where OfficeWorkload == "MicrosoftCopilot" or RecordType == "CopilotInteraction"
-| project TimeGenerated, UserId, Operation, ClientIP
+| where TimeGenerated > ago(7d)
+| where RecordType == "CopilotInteraction"
+    or (OfficeWorkload == "MicrosoftCopilot")
+| extend CopilotApp  = tostring(parse_json(tostring(AdditionalData)).AppHost)
+| extend PromptData  = tostring(parse_json(tostring(AdditionalData)).Context)
+| project TimeGenerated, UserId, Operation, CopilotApp, PromptData, ClientIP
 | order by TimeGenerated desc
 
-// Correlate Copilot sessions with downstream data access
-let CopilotUsers = OfficeActivity
-| where OfficeWorkload == "MicrosoftCopilot"
-| summarize Sessions = count() by UserId, bin(TimeGenerated, 1h);
+// Correlate: accounts with many Copilot sessions + spike in file/email access
+let CopilotSessions =
+    OfficeActivity
+    | where RecordType == "CopilotInteraction"
+    | summarize SessionCount = count() by UserId, bin(TimeGenerated, 1h);
 OfficeActivity
-| where Operation in ("FileDownloaded","FileAccessed","MessageRead")
-| join kind=inner CopilotUsers on UserId
-| where Sessions > 5
+| where Operation in ("FileDownloaded","FileAccessed","MessageRead","SearchQueryPerformed")
+| join kind=inner CopilotSessions on UserId
+| where SessionCount > 10
 | summarize AccessCount = count() by UserId, Operation, bin(TimeGenerated, 1h)
-| where AccessCount > 50`,
+| where AccessCount > 50
+| order by AccessCount desc`,
     mitigations: [
       "Enable Microsoft Purview Copilot audit logging — it is NOT on by default",
       "Apply sensitivity labels to restrict Copilot from surfacing highly confidential data",
@@ -1814,35 +1924,39 @@ OfficeActivity
     ],
     runbook: {
       triage: [
-        "Verify Copilot audit logging is enabled (Purview) — if not, visibility is blind",
-        "Identify account using Copilot and confirm compromise",
-        "Determine which Copilot apps are active (Teams, Word, Outlook, etc.)",
-        "Assess what data the compromised account has access to",
-        "Check Purview logs for suspicious prompt patterns",
+        "Verify that Copilot audit logging is enabled in Microsoft Purview — if not, visibility is blind",
+        "Identify the compromised account using Copilot and confirm account compromise",
+        "Determine which Copilot apps were active (Teams, Word, Outlook, SharePoint, Loop)",
+        "Assess what data the compromised account has access to that Copilot could surface",
+        "Check Purview audit logs for anomalous prompt patterns or large data retrievals",
       ],
       investigate: [
-        "Review all Copilot interactions in OfficeActivity logs",
-        "Correlate Copilot sessions with file and email access patterns",
-        "Identify sensitive data surfaced by Copilot prompts",
-        "Determine if Copilot was used to draft spearphishing content",
-        "Check Teams channel history for Copilot-assisted enumeration",
+        "Review all Copilot interactions in Purview audit (CopilotInteraction record type)",
+        "Identify sensitive data types surfaced by Copilot prompts (contracts, source code, PII)",
+        "Correlate Copilot sessions with downstream file access and email read patterns",
+        "Determine if Copilot was used to draft spearphishing content or exfiltrate summaries",
+        "Assess if attacker used Copilot to navigate the org chart or identify high-value targets",
       ],
       contain: [
-        "Revoke account sessions and reset credentials",
-        "Temporarily disable Copilot license for compromised account",
-        "Apply sensitivity labels to restrict further Copilot data surfacing",
-        "Enable Purview communication compliance for Copilot monitoring",
+        "Disable account immediately: Set-AzureADUser -AccountEnabled $false",
+        "Reset password and revoke all sessions: Revoke-AzureADUserAllRefreshTokens",
+        "Remove Copilot license from compromised account to prevent further AI-assisted access",
+        "Apply sensitivity labels to restrict Copilot from surfacing classified or confidential data",
+        "Enable Purview communication compliance monitoring for Copilot activity tenant-wide",
       ],
       recover: [
-        "Enable Copilot audit logging if not already active",
-        "Implement sensitivity labeling on all high-value documents",
-        "Configure Copilot-aware DLP rules in Purview",
-        "Restrict Copilot access via CAP to compliant devices only",
+        "Re-enable account only after credential reset and phishing-resistant MFA re-enrollment",
+        "Enable Copilot audit logging in Purview if not already active — not on by default",
+        "Implement Insider Risk Management policies scoped to Copilot data access patterns",
+        "Enforce device compliance requirement for Copilot access via Conditional Access",
+        "Apply sensitivity labels to all high-value data to prevent future unauthorized surfacing",
       ],
       escalate: [
-        "Strategic/confidential data confirmed as surfaced (M&A, HR, finance)",
-        "Copilot used to generate convincing BEC content with internal context",
-        "Audit logging was not enabled — full extent of abuse unknown",
+        "Escalate if Copilot surfaced regulated data (PII, financial, health, legal privilege)",
+        "Escalate if Copilot was used to draft attacker communications or spearphish content",
+        "Notify privacy team — Copilot data exposure may trigger breach notification obligations",
+        "Escalate if the account had broad organizational data access (executive, admin)",
+        "Engage Microsoft DART if the attack demonstrates novel Copilot-specific TTPs",
       ],
     },
   },
@@ -1911,36 +2025,39 @@ SigninLogs
     ],
     runbook: {
       triage: [
-        "Identify the registered device, its OS, and registering IP",
-        "Determine if device registration was authorized",
-        "Check if device was used for sign-in immediately after registration",
-        "Verify Intune enrollment status of the device",
-        "Assess if device was used to bypass device compliance CAP",
+        "Identify the registered device: display name, OS, registering IP, and registration time",
+        "Determine if device registration was authorized by the account owner",
+        "Check if the device was used for sign-in immediately after registration",
+        "Verify if the device is enrolled in Intune or is unmanaged",
+        "Assess if device was used to bypass device compliance Conditional Access policies",
       ],
       investigate: [
-        "Pull all sign-ins using the ghost device ID",
-        "Identify all resources accessed via the ghost device",
-        "Check if PRT was obtained and used from the device",
-        "Determine if new MFA methods were registered using the device",
-        "Review account that registered the device for signs of compromise",
+        "Pull all sign-ins that used this device ID across the tenant",
+        "Identify all resources accessed via the ghost device session",
+        "Determine if a Primary Refresh Token (PRT) was issued and used",
+        "Check if the registering account was compromised or if this is an insider threat",
+        "Review all other devices registered by the same account in the last 30 days",
       ],
       contain: [
-        "Delete the ghost device: Remove-AzureADDevice",
-        "Revoke all PRTs associated with the device",
-        "Revoke sessions for registering account",
-        "Restrict device registration to admins immediately",
-        "Review all recently registered devices in last 30 days",
+        "Disable account that registered the device: Set-AzureADUser -AccountEnabled $false",
+        "Reset password for the registering account",
+        "Revoke all sessions and PRTs: Revoke-AzureADUserAllRefreshTokens",
+        "Delete the ghost device immediately: Remove-AzureADDevice -ObjectId <DeviceId>",
+        "Revoke all PRTs associated with the device in Entra ID",
+        "Restrict device registration to admins only via Entra ID Device Settings",
       ],
       recover: [
-        "Implement Intune compliance policy before marking any device compliant",
-        "Restrict device registration via Entra ID settings",
-        "Implement CAP requiring Hybrid AAD Join for all resource access",
-        "Audit all BYOD devices in tenant",
+        "Re-enable account only after credential reset and investigation complete",
+        "Implement Intune enrollment requirement for all device registrations",
+        "Enforce device compliance CAP to block unmanaged devices from accessing corporate resources",
+        "Review all recently registered devices in last 30 days for additional ghost devices",
+        "Require MFA re-enrollment from a known-good managed device",
       ],
       escalate: [
-        "Ghost device used to bypass device-compliance CAP and access sensitive apps",
-        "PRT from ghost device used to access admin resources",
-        "Multiple ghost devices registered — coordinated attack",
+        "Escalate if PRT was used to access privileged resources or admin portals",
+        "Escalate if multiple ghost devices are found across different accounts",
+        "Escalate if device was registered via a compromised admin account",
+        "Notify compliance if unmanaged device accessed regulated or sensitive data",
       ],
     },
   },
@@ -2007,35 +2124,40 @@ AuditLogs
     ],
     runbook: {
       triage: [
-        "Identify app, permissions granted, and consenting user",
-        "Determine if app is from known/trusted vendor",
-        "Check external tenant ID vs. victim tenant — is this a multi-tenant app?",
-        "Assess what data the app has accessed since consent",
-        "Identify all other users who may have consented to the same app",
+        "Identify the application, all permissions granted, and all users who consented",
+        "Determine if the app is from a known trusted vendor or is unknown/external",
+        "Check the external tenant ID and app publisher verification status",
+        "Assess what data the app has already accessed since consent was granted",
+        "Determine how many users across the tenant consented to the app",
       ],
       investigate: [
-        "Pull Graph API activity for the app's client ID",
-        "Identify all data accessed via the consented permissions",
-        "Review MicrosoftGraphActivityLogs for app-level calls",
-        "Check for inbox rules or other actions taken via the app post-consent",
-        "Search for phishing campaign targeting other users with same app link",
+        "Pull all OAuth2 token issuances for the malicious app across all consenting users",
+        "Identify all data accessed by the app: mailbox, OneDrive, Teams, contacts, calendar",
+        "Determine if the app has been active continuously or in bursts (suggesting scheduled exfil)",
+        "Check if the app added credentials or modified its own registration post-consent",
+        "Identify the phishing vector that lured users to consent",
       ],
       contain: [
-        "Revoke consent: Remove-AzureADOAuth2PermissionGrant for all users",
-        "Block app in Entra ID tenant allow/block list",
-        "Revoke all tokens issued to the app",
-        "Disable user consent immediately — enforce admin consent workflow",
+        "Revoke all consent grants tenant-wide: Remove-AzureADOAuth2PermissionGrant for all users",
+        "Block the malicious app in Entra ID tenant allow/block list",
+        "Disable all accounts of users who consented and confirmed data was accessed",
+        "Reset passwords for all consenting users",
+        "Revoke all active tokens issued to the malicious app",
+        "Disable user consent immediately — enforce admin consent workflow going forward",
       ],
       recover: [
-        "Rotate credentials for users whose data was accessed via the app",
-        "Audit all enterprise apps in tenant for similar permissions",
-        "Enable admin consent workflow in Entra ID",
-        "Notify affected users and data owners",
+        "Re-enable accounts only after token revocation confirmed and credentials reset",
+        "Enable admin consent workflow in Entra ID — prevent future user-level consent",
+        "Implement periodic app consent review via Entra ID access reviews",
+        "Deploy anti-phishing policies to catch OAuth consent phishing lures in email",
+        "Alert all affected users to review their account activity independently",
       ],
       escalate: [
-        "App accessed mailboxes of privileged users",
-        "Multiple users consented across organization",
-        "Evidence of long-running persistent access since consent",
+        "Escalate if app was granted Mail.ReadWrite, Files.ReadWrite.All, or Directory.ReadWrite.All",
+        "Escalate immediately — OAuth app persistence survives password resets unless explicitly revoked",
+        "Notify legal/compliance — sustained data access may constitute a notifiable breach",
+        "Engage Microsoft DART if app accessed a large volume of data across many users",
+        "Report malicious app to Microsoft via MSRC if it passed publisher verification",
       ],
     },
   },
@@ -2103,35 +2225,39 @@ CloudAppEvents
     ],
     runbook: {
       triage: [
-        "Identify all new/modified/deleted inbox rules in the alert window",
-        "Classify rules: forwarding, deletion, movement, suppression",
-        "Determine how long each rule was active",
-        "Assess which security alerts may have been suppressed",
-        "Identify if BEC fraud was facilitated while rules were active",
+        "Identify all new, modified, and deleted inbox rules in the alert window",
+        "Classify rules: forwarding (external), deletion, movement (hide from inbox), suppression",
+        "Determine how long each rule has been active and what email volume was affected",
+        "Assess if any security alert emails were deleted or moved by suppression rules",
+        "Confirm whether BEC fraud was facilitated while the rules were active",
       ],
       investigate: [
-        "Export full inbox rules history from Exchange audit log",
-        "Correlate rule creation timing with account compromise",
-        "Identify emails forwarded externally during rule active period",
-        "Determine if security notifications were deleted",
-        "Check for any fraudulent emails sent during covert monitoring phase",
+        "Run MessageTrace to enumerate all emails affected by forwarding or deletion rules",
+        "Identify destination of forwarded emails and assess data sensitivity",
+        "Determine if financial or executive communications were intercepted",
+        "Check for companion rules: often attackers create both a forwarding rule and a deletion rule to hide replies",
+        "Review full sign-in history for the account to confirm compromise timeline",
       ],
       contain: [
-        "Remove all malicious rules immediately",
-        "Revoke sessions and reset password",
-        "Block external auto-forwarding tenant-wide",
-        "Alert finance/HR if fraud-related rules detected",
+        "Disable account immediately: Set-AzureADUser -AccountEnabled $false",
+        "Reset password to prevent attacker from recreating rules",
+        "Revoke all active sessions: Revoke-AzureADUserAllRefreshTokens -ObjectId <UPN>",
+        "Remove all malicious rules: Get-InboxRule -Mailbox <UPN> | Remove-InboxRule",
+        "Block external auto-forwarding tenant-wide: Set-RemoteDomain -AutoForwardEnabled ",
+        "Alert Finance and HR if rules were used to facilitate fraud",
       ],
       recover: [
-        "Implement MDCA alert policy for inbox rule creation",
-        "Block external forwarding at transport layer",
-        "Review all accounts for similar rule patterns",
-        "Re-deliver any security emails that may have been deleted",
+        "Re-enable account only after all rules reviewed, credentials reset, and MFA re-enrolled",
+        "Enable Exchange Online alert for inbox rule creation in Defender for Office 365",
+        "Implement anti-forwarding policy at the transport layer",
+        "Deploy MDCA policy for inbox rule creation with automatic session suspension",
+        "Run a tenant-wide inbox rule audit to identify other compromised accounts",
       ],
       escalate: [
-        "Security alert deletion rules — unknown window of attacker visibility",
-        "Financial fraud facilitated during covert monitoring phase",
-        "Evidence destruction: rules deleted immediately after compromise detected",
+        "Escalate if deletion rules suppressed security alerts — delayed detection window",
+        "Escalate if forwarding was active for more than 72 hours — significant data exposure",
+        "Escalate if executive or finance mailboxes were targeted",
+        "Notify compliance if the forwarded data included regulated information",
       ],
     },
   },
@@ -2208,36 +2334,40 @@ CloudAppEvents
     ],
     runbook: {
       triage: [
-        "Identify the external sender account and originating tenant",
+        "Identify the external sender account, originating tenant, and targeted users",
         "Determine scope: how many internal users received the phishing message?",
-        "Check if any users clicked the link or downloaded attached files",
-        "Verify if compromised internal account was used vs. external threat actor",
-        "Confirm URL/file reputation via threat intelligence",
+        "Check if any users clicked the link, opened an attachment, or entered credentials",
+        "Verify URL and file reputation via Defender Threat Intelligence or VirusTotal",
+        "Determine if a compromised internal account was used as the sender or a genuine external actor",
       ],
       investigate: [
-        "Pull all Teams activity from the external sender in CloudAppEvents",
-        "Identify all internal users who interacted with the malicious content",
-        "Check SigninLogs for AiTM/token theft activity for all recipients",
-        "Review file downloads for any malicious Office documents",
-        "Determine if attacker account is from a specific external tenant",
+        "Pull all Teams messages from the external sender account across the tenant",
+        "Identify any accounts that may have been compromised via the phishing link",
+        "Check for follow-on sign-in anomalies from users who interacted with the message",
+        "Determine if malicious files were downloaded from Teams storage and executed",
+        "Assess if the external tenant is itself compromised or is attacker-controlled",
       ],
       contain: [
-        "Block external sender in Teams admin center",
-        "Block the phishing domain in Defender for Office 365",
-        "Revoke sessions for any users who clicked the phishing link",
-        "Remove malicious files from Teams storage",
-        "Add the external tenant to Teams external access blocklist",
+        "Disable any internal accounts confirmed compromised via phishing: Set-AzureADUser -AccountEnabled $false",
+        "Reset passwords and revoke sessions for all confirmed compromised accounts",
+        "Block the external sender in Teams Admin Center: External Access blocklist",
+        "Block the phishing domain in Defender for Office 365 tenant allow/block list",
+        "Remove malicious files from Teams storage and SharePoint",
+        "Block the external tenant from Teams external access if it is attacker-controlled",
       ],
       recover: [
-        "Restrict Teams external access to allowlisted domains only",
-        "Enable Safe Links in Teams policies",
-        "Issue user communication about the Teams phishing campaign",
-        "Review Teams external access settings org-wide",
+        "Re-enable compromised accounts only after credential reset and phishing-resistant MFA enrollment",
+        "Restrict Teams external access to approved domains only (known partner tenants)",
+        "Enable Defender for Office 365 Safe Links policy scoped to Teams messages",
+        "Implement Teams message scanning for malicious URLs and attachments",
+        "Brief all users who received the phishing message on the attack and correct response",
       ],
       escalate: [
-        "Users confirmed to have clicked link and MFA prompts followed",
-        "Malicious file executed on endpoints — invoke endpoint IR process",
-        "Attacker was an internal compromised account — broader compromise scope",
+        "Escalate if admin or privileged accounts received or interacted with the phishing message",
+        "Escalate if malware was executed on an endpoint via the Teams phishing attachment",
+        "Escalate if the attack campaign spans multiple tenants",
+        "Engage endpoint IR team if any endpoint compromise is suspected",
+        "Notify Microsoft if the originating tenant is confirmed compromised — report via MSRC",
       ],
     },
   },
@@ -2279,19 +2409,28 @@ CloudAppEvents
       { phase: "Collection", technique: "Pre-Ransomware Data Exfiltration" },
       { phase: "Impact", technique: "Cloud Storage Encryption via Overwrite" },
     ],
-    kql: `// Detect mass file modification (version cycling ransomware pattern)
+    kql: `// SharePoint/OneDrive mass file modification (ransomware version cycling)
+// Sentinel: requires Office 365 connector (OfficeActivity)
 OfficeActivity
-| where Operation in ("FileModified","FileUploaded","FileSyncUploadedFull")
-| summarize ModCount = count(), DistinctFiles = dcount(SourceFileName)
-  by UserId, SiteUrl, bin(TimeGenerated, 1h)
+| where TimeGenerated > ago(1d)
+| where Operation in ("FileModified","FileUploaded","FileSyncUploadedFull",
+    "FileCheckedIn","FileVersionsAllDeleted","FileVersionRecycled")
+| summarize
+    ModCount      = count(),
+    DistinctFiles = dcount(SourceFileName),
+    SiteList      = make_set(SiteUrl, 5)
+  by UserId, bin(TimeGenerated, 1h)
 | where ModCount > 200 or DistinctFiles > 100
 | order by ModCount desc
 
-// Detect version count spike on specific files
+// Detect version history exhaustion on specific files (high fidelity)
 OfficeActivity
-| where Operation == "FileVersionsAllDeleted" or Operation == "FileVersionRecycled"
-| summarize VersionEvents = count() by UserId, SourceFileName, bin(TimeGenerated, 30m)
-| where VersionEvents > 10`,
+| where TimeGenerated > ago(1d)
+| where Operation in ("FileVersionsAllDeleted","FileVersionRecycled")
+| summarize VersionDeleteEvents = count(), AffectedFiles = make_set(SourceFileName, 10)
+  by UserId, SiteUrl, bin(TimeGenerated, 30m)
+| where VersionDeleteEvents > 5
+| order by VersionDeleteEvents desc`,
     mitigations: [
       "Increase SharePoint version history limit beyond 500 for critical libraries",
       "Enable SharePoint site-level backup via Microsoft 365 Backup (additional protection)",
@@ -2302,36 +2441,40 @@ OfficeActivity
     ],
     runbook: {
       triage: [
-        "Identify scope: how many sites, libraries, and files are affected?",
-        "Determine if version history is exhausted or still recoverable",
-        "Identify the compromised account driving the modifications",
-        "Check if exfiltration preceded the encryption (copy-then-ransom)",
-        "Contact Microsoft Support immediately if files are beyond version history",
+        "Identify scope: how many SharePoint sites, document libraries, and files are affected?",
+        "Determine if version history is exhausted or still recoverable per library",
+        "Identify the compromised account driving the file modifications",
+        "Confirm if a copy-then-ransom pattern occurred (exfiltration before encryption)",
+        "Contact Microsoft Support immediately if files exceed version history limits",
       ],
       investigate: [
-        "Pull OfficeActivity for all file operations in the window",
-        "Identify originating IP and whether Power Automate was used",
-        "Determine if Graph API was used to automate file overwrites",
-        "Assess if endpoint ransomware via OneDrive sync is involved",
-        "Identify all affected site collections and document libraries",
+        "Pull OfficeActivity logs for all file operations by the account in the window",
+        "Determine if Power Automate flows, Graph API, or sync client was used to automate overwrites",
+        "Identify all affected site collections and document libraries with modification counts",
+        "Assess if OneDrive endpoint sync was the initial vector (endpoint ransomware syncing up)",
+        "Determine if any data was exfiltrated to external destinations before encryption",
       ],
       contain: [
-        "Revoke account sessions and disable account immediately",
-        "Block the source IP in Named Locations",
-        "Suspend any Power Automate flows associated with the account",
-        "Stop OneDrive sync on affected endpoints",
-        "Engage Microsoft Support for version history recovery assistance",
+        "Disable account immediately: Set-AzureADUser -AccountEnabled $false",
+        "Reset password to prevent further automated file operations",
+        "Revoke all sessions: Revoke-AzureADUserAllRefreshTokens -ObjectId <UPN>",
+        "Block source IP in Named Locations",
+        "Suspend any Power Automate flows associated with the account in Power Platform admin center",
+        "Disconnect OneDrive sync on affected endpoints to stop further upload of encrypted files",
       ],
       recover: [
-        "Use Microsoft 365 Backup for site-level restore if available",
-        "Work with Microsoft Support for version history recovery (limited window)",
-        "Restore from third-party backup if available (Veeam, AvePoint, etc.)",
-        "Implement higher version limits and backup policies to prevent recurrence",
+        "Restore files from SharePoint version history — use PowerShell for bulk restore where possible",
+        "Engage Microsoft Support for version history recovery if limits have been exhausted",
+        "Restore from Microsoft 365 Backup if enabled and within recovery window",
+        "Increase SharePoint version history limit beyond 500 for all critical document libraries",
+        "Re-enable account only after full endpoint remediation and credential reset confirmed",
       ],
       escalate: [
-        "Version history exhausted with no third-party backup — data may be unrecoverable",
-        "Exfiltration confirmed before encryption — potential data breach",
-        "Multiple site collections affected — full SharePoint environment at risk",
+        "Escalate immediately — data destruction is a P1 incident",
+        "Engage Microsoft Support immediately for version recovery assistance",
+        "Notify legal counsel and executive leadership",
+        "Engage endpoint IR team if OneDrive sync from a ransomed endpoint is the vector",
+        "Notify cyber insurance carrier and assess breach notification obligations if data was exfiltrated",
       ],
     },
   },
@@ -2403,36 +2546,40 @@ CloudAppEvents
     ],
     runbook: {
       triage: [
-        "Identify the malicious flow, its triggers, actions, and connections",
+        "Identify the malicious flow: name, owner, triggers, actions, and connections used",
         "Determine if the flow is currently active and executing",
-        "Assess what data has already been sent via the flow",
-        "Identify destination endpoint (webhook URL, external storage)",
-        "Determine all connections used by the flow and their access scope",
+        "Assess what data has already been sent via the flow (volume and sensitivity)",
+        "Identify the destination endpoint (webhook URL, external storage, HTTP action)",
+        "Determine the scope of the connections used (mailbox, SharePoint, Teams, SQL)",
       ],
       investigate: [
-        "Pull Power Automate flow run history to assess execution volume",
-        "Identify all external endpoints that received data",
-        "Review all connections owned by the compromised account",
-        "Check for similar flows created by other accounts",
-        "Correlate flow execution timing with data access patterns",
+        "Pull Power Platform admin center run history to assess full data exposure",
+        "Identify all connections associated with the flow and their permission scope",
+        "Determine the initial access vector (compromised account, malicious app, insider)",
+        "Check for additional malicious flows across the tenant owned by the same account",
+        "Assess if the flow data was forwarded to an attacker-controlled external endpoint",
       ],
       contain: [
-        "Disable/delete malicious flow immediately via Power Platform admin center",
-        "Revoke account sessions and reset password",
+        "Disable account immediately: Set-AzureADUser -AccountEnabled $false",
+        "Reset password and revoke all sessions: Revoke-AzureADUserAllRefreshTokens",
+        "Disable and delete the malicious flow immediately via Power Platform admin center",
         "Delete all OAuth connections associated with the malicious flow",
-        "Block destination webhook URL at network/firewall level",
-        "Implement DLP policy blocking HTTP connector immediately",
+        "Block the destination webhook URL or external IP at the network/firewall level",
+        "Implement Power Platform DLP policy blocking HTTP connector and external data actions",
       ],
       recover: [
-        "Audit all Power Automate flows in tenant for similar patterns",
-        "Implement DLP policies preventing data egress to arbitrary HTTP endpoints",
-        "Enable Power Platform audit logging and monitoring",
-        "Restrict flow creation permissions to authorized users",
+        "Re-enable account only after investigation complete and credentials fully reset",
+        "Implement tenant-wide Power Platform DLP policies restricting data connectors",
+        "Enable Power Platform admin activity logs and configure alerts for new flow creation",
+        "Require admin approval for flows that use external HTTP connectors",
+        "Audit all existing flows across the tenant for unauthorized external data destinations",
       ],
       escalate: [
-        "Flow confirmed exfiltrating sensitive/regulated data",
-        "Multiple flows found across different accounts — coordinated attack",
-        "Flow was running for extended period — significant data loss possible",
+        "Escalate immediately if large-scale data exfiltration is confirmed",
+        "Notify legal/compliance — Power Platform exfil may trigger breach notification",
+        "Escalate if multiple flows across multiple accounts are found (coordinated or insider)",
+        "Engage Microsoft DART if sophisticated persistent exfiltration mechanism is identified",
+        "Notify data protection officer if PII or regulated data was exfiltrated",
       ],
     },
   },
@@ -2507,38 +2654,40 @@ AuditLogs
     ],
     runbook: {
       triage: [
-        "Confirm MSOL account anomalous activity in audit logs",
-        "Immediately assess AADConnect server security status",
-        "Identify all operations performed by MSOL account outside normal sync",
-        "Determine if any cloud-only privileged accounts were modified",
-        "Treat AADConnect server as fully compromised pending investigation",
+        "Confirm anomalous MSOL account or AADConnect service account activity in AuditLogs",
+        "Immediately assess whether the AADConnect server is online and accessible",
+        "Identify all operations performed by the MSOL account outside of normal sync patterns",
+        "Determine if any cloud-only privileged accounts or break-glass accounts were modified",
+        "Treat AADConnect server as fully compromised — do not trust any data from it",
       ],
       investigate: [
-        "Engage on-premises IR team for AADConnect server forensics",
-        "Check AADConnect server event logs for attacker tooling",
-        "Identify all accounts modified by MSOL account",
-        "Review PTA agent configuration if PTA is in use",
-        "Determine if password hashes were accessible (PHS mode)",
+        "Review all Entra ID AuditLogs entries initiated by the MSOL sync account",
+        "Identify all user accounts modified, created, or deleted via the sync account",
+        "Determine if on-premises credentials were used to pivot to cloud privileged access",
+        "Investigate on-premises AD for domain controller compromise indicators (DCSync, Golden Ticket)",
+        "Assess whether AADConnect configuration was modified to enable pass-through or federation",
       ],
       contain: [
-        "Disable MSOL/Sync account immediately in Entra ID",
-        "Isolate AADConnect server from network",
-        "Pause directory synchronization temporarily",
-        "Reset all accounts modified by MSOL account",
-        "Force re-authentication for all users (revoke all sessions)",
+        "Disable the MSOL/AADConnect service account immediately in Entra ID",
+        "Pause directory synchronization to prevent further on-prem-to-cloud propagation",
+        "Disable all cloud accounts confirmed modified by the MSOL account",
+        "Reset passwords for all accounts modified or touched by the MSOL account",
+        "Revoke all sessions tenant-wide: consider full tenant token revocation",
+        "Isolate the AADConnect server and all on-premises domain controllers from network",
       ],
       recover: [
-        "Rebuild AADConnect server on new hardware with new credentials",
-        "Full on-premises IR for domain controller and AADConnect server",
-        "Rotate all service account credentials in on-premises AD",
-        "Consider migrating to cloud-only authentication (remove sync dependency)",
-        "Engage Microsoft DART for hybrid identity recovery",
+        "Re-establish AADConnect on a clean server with new service account credentials",
+        "Re-enable cloud accounts in priority order after credential validation",
+        "Implement cloud-only authentication for all Entra ID privileged accounts (no sync)",
+        "Deploy Entra ID Connect Health for ongoing AADConnect monitoring",
+        "Engage on-premises IR team — domain controller compromise must be assumed and investigated",
       ],
       escalate: [
-        "IMMEDIATE: Treat as full on-premises + cloud compromise",
-        "Engage dedicated IR team — this is a tier-0 compromise",
-        "Notify executive leadership and legal",
-        "Consider complete tenant rebuild if evidence of persistent access is found",
+        "This is an automatic P1 — engage Microsoft DART immediately",
+        "This attack pattern is associated with nation-state actors (NOBELIUM/APT29)",
+        "Notify executive leadership and legal counsel immediately",
+        "Notify relevant regulatory authorities if regulated data was accessed",
+        "Consider full environment rebuild if on-premises domain compromise is confirmed",
       ],
     },
   },
@@ -2614,36 +2763,40 @@ AuditLogs
     ],
     runbook: {
       triage: [
-        "Identify which role was activated, by whom, and from where",
-        "Verify if activation was authorized via change management",
-        "Assess all privileged operations performed during activation window",
-        "Determine if any persistence was established during elevated period",
-        "Check if PIM policies were modified during the activation window",
+        "Identify which PIM role was activated, by whom, and from what IP and device",
+        "Verify if the activation was authorized via change management or approval workflow",
+        "Assess all privileged operations performed during the elevation window",
+        "Determine if any persistence was established during the elevated period (new admins, apps, federation)",
+        "Check if PIM policies or approval requirements were modified during the window",
       ],
       investigate: [
-        "Pull all audit events during the PIM activation window for the account",
-        "Identify any new accounts, apps, or role assignments created",
-        "Check if PIM policies or approval requirements were modified",
-        "Review justification text for plausibility",
-        "Correlate activation with change tickets or scheduled maintenance",
+        "Pull all AuditLogs operations performed during and after the PIM activation window",
+        "Identify any new admin accounts created, credentials added, or policies weakened",
+        "Determine the initial compromise vector that gave the attacker access to the eligible account",
+        "Assess all changes made to security policies, CAPs, or connectors during elevation",
+        "Correlate PIM activation with any subsequent sign-ins or API calls from unexpected IPs",
       ],
       contain: [
-        "Deactivate the PIM role if still active",
-        "Revoke all sessions for the account",
-        "Reset password and require MFA re-enrollment",
-        "Reverse any changes made during the elevated window",
-        "Require approval workflow for future activations",
+        "Deactivate the PIM role immediately if still active via Entra ID PIM portal",
+        "Disable the account that made the unauthorized activation: Set-AzureADUser -AccountEnabled $false",
+        "Reset password for the compromised account",
+        "Revoke all sessions: Revoke-AzureADUserAllRefreshTokens -ObjectId <UPN>",
+        "Reverse any changes made during the elevated window (role assignments, CAP changes, app registrations)",
+        "Require approval workflow for all future PIM activations at this role level",
       ],
       recover: [
-        "Enable approval requirements for all Global Admin and PRA activations",
-        "Configure PIM notifications to security team",
-        "Reduce maximum activation duration",
-        "Implement PIM activation anomaly detection via Sentinel",
+        "Re-enable account only after full investigation, credential reset, and MFA re-enrollment",
+        "Require phishing-resistant MFA for all PIM-eligible account sign-ins",
+        "Enable PIM access reviews to validate all eligible role assignments quarterly",
+        "Implement just-in-time access with maximum 1-hour activation windows for sensitive roles",
+        "Enable PIM audit alerts for suspicious activation patterns (off-hours, new IP, new device)",
       ],
       escalate: [
-        "Global Admin activated without approval and used for privileged operations",
-        "PIM policies modified to weaken controls — indicates advanced attacker",
-        "Backdoor created during elevation window",
+        "Escalate immediately if Global Admin, Exchange Admin, or Security Admin role was abused",
+        "Escalate if persistence was established during the elevation window",
+        "Escalate if PIM approval workflow was bypassed or approval settings were weakened",
+        "Engage Microsoft DART if scope of damage during elevation window cannot be bounded",
+        "Notify compliance if privileged access was used to access regulated data",
       ],
     },
   },
@@ -2716,37 +2869,40 @@ AuditLogs
     ],
     runbook: {
       triage: [
-        "Identify the affected service principal and its permissions",
-        "Determine which credential (secret/cert) was compromised",
-        "Assess scope of access: what can this service principal access?",
-        "Determine how long the credential may have been exposed",
-        "Identify all API calls made using the compromised credential",
+        "Identify the affected service principal, its permissions, and the compromised credential type (secret or certificate)",
+        "Determine how the credential was exposed: leaked in repo, misconfigured pipeline, stolen from vault",
+        "Assess the permission scope: what can this service principal access across the tenant?",
+        "Estimate how long the credential may have been exposed and in attacker hands",
+        "Identify all API calls made using the compromised credential in the exposure window",
       ],
       investigate: [
-        "Pull all sign-in and Graph activity for the service principal",
-        "Identify the source of the credential leak (repo, config, logs)",
-        "Determine all resources accessed during the exposure window",
-        "Check for secondary persistence: new credentials added to app?",
-        "Review app permissions for over-privilege",
+        "Pull AADServicePrincipalSignInLogs for the service principal in the suspected window",
+        "Identify all resources accessed, APIs called, and data read or modified",
+        "Determine if the attacker added new credentials to the service principal for persistence",
+        "Check if the service principal was used to register new apps or grant new permissions",
+        "Assess whether the credential was used to pivot to other identities or tenants",
       ],
       contain: [
-        "Immediately rotate/revoke the compromised credential",
-        "If secret was leaked in repo: treat as fully compromised — revoke and re-key",
-        "Revoke all active tokens for the service principal",
-        "Temporarily disable the service principal pending investigation",
-        "Remove any new credentials added by attacker",
+        "Immediately revoke and delete the compromised credential (secret or certificate) from the service principal",
+        "If leaked in a repo: treat as fully compromised — rotate immediately regardless of apparent use",
+        "Disable the service principal temporarily pending investigation",
+        "Revoke all active tokens issued to the service principal",
+        "Remove any new credentials added by the attacker to the service principal",
+        "Block source IPs seen in anomalous service principal sign-ins",
       ],
       recover: [
-        "Migrate to managed identity where possible",
-        "Implement credential rotation automation",
-        "Scan all repos for credential exposure (GitHub Advanced Security)",
-        "Reduce app permissions to minimum required",
-        "Enable Workload Identity Premium for ongoing monitoring",
+        "Re-issue a new credential using a secure secrets management solution (Azure Key Vault)",
+        "Re-enable the service principal only after new credential is issued and old one confirmed revoked",
+        "Implement Managed Identity instead of client secrets where possible — eliminates credential exposure",
+        "Implement credential scanning in all code repos and CI/CD pipelines (Microsoft Defender for DevOps)",
+        "Apply least-privilege permissions — remove all Graph API or Azure RBAC roles not actively needed",
       ],
       escalate: [
-        "App had tenant-wide Application-level permissions (Mail.Read.All, Files.ReadWrite.All)",
-        "Evidence of mass data access during exposure window",
-        "Secret was committed to public repository — assume broad exposure",
+        "Escalate if service principal has Directory.ReadWrite.All, Mail.ReadWrite.All, or equivalent",
+        "Escalate if attacker added new credentials — persistence survives disabling original credential",
+        "Escalate if service principal was used to access other tenants or cloud environments",
+        "Notify compliance if service principal accessed regulated or sensitive data",
+        "Engage DevSecOps team to scan all repos and pipelines for credential leakage",
       ],
     },
   },
@@ -2790,21 +2946,27 @@ AuditLogs
       { phase: "Collection", technique: "All-Tenant Email BCC to External Attacker" },
       { phase: "Defense Evasion", technique: "Security Notification Suppression" },
     ],
-    kql: `// Transport rule creation and modification monitoring
-AuditLogs
-| where OperationName in ("New-TransportRule","Set-TransportRule",
-    "Enable-TransportRule","Remove-TransportRule")
-| extend RuleName = tostring(TargetResources[0].displayName)
-| extend CreatedBy = tostring(InitiatedBy.user.userPrincipalName)
-| extend RuleParams = tostring(TargetResources[0].modifiedProperties)
-| where RuleParams has_any ("BlindCopyTo","RedirectMessageTo","CopyTo","Reject")
-| project TimeGenerated, OperationName, RuleName, CreatedBy, RuleParams
-
-// Also check via Exchange audit (if not in AuditLogs)
+    kql: `// Transport rule creation/modification — primary via OfficeActivity (Exchange Admin)
+// Sentinel: requires Office 365 connector
 OfficeActivity
+| where TimeGenerated > ago(30d)
 | where RecordType == "ExchangeAdmin"
-| where Operation in ("New-TransportRule","Set-TransportRule")
-| project TimeGenerated, UserId, Operation, Parameters`,
+| where Operation in ("New-TransportRule","Set-TransportRule",
+    "Enable-TransportRule","Remove-TransportRule","Disable-TransportRule")
+| extend RuleParams = tostring(Parameters)
+| extend CreatedBy  = UserId
+| where RuleParams has_any ("BlindCopyTo","RedirectMessageTo","CopyTo",
+    "Reject","Delete","Quarantine","PrependSubject","ModifyMessageProperty")
+| project TimeGenerated, Operation, CreatedBy, ClientIP, RuleParams
+| order by TimeGenerated desc
+
+// Secondary: Entra ID AuditLogs (catches rule changes via EXO PowerShell via Entra)
+// AuditLogs
+// | where OperationName in ("New-TransportRule","Set-TransportRule","Enable-TransportRule")
+// | extend RuleName  = tostring(TargetResources[0].displayName)
+// | extend ChangedBy = tostring(InitiatedBy.user.userPrincipalName)
+// | extend Params    = tostring(TargetResources[0].modifiedProperties)
+// | project TimeGenerated, OperationName, RuleName, ChangedBy, Params`,
     mitigations: [
       "Restrict New-TransportRule to dedicated Exchange Admin accounts with PIM",
       "Maintain a baseline of all transport rules — alert on any deviation",
@@ -2815,35 +2977,40 @@ OfficeActivity
     ],
     runbook: {
       triage: [
-        "Run Get-TransportRule to enumerate all active transport rules",
-        "Compare against approved baseline — identify unauthorized rules",
-        "Determine scope: which emails have been intercepted/modified?",
-        "Identify who created the rule and from what IP",
-        "Assess if BCC/redirect rules have been active for extended period",
+        "Run Get-TransportRule to enumerate all active transport rules in the tenant",
+        "Compare against approved baseline — identify any unauthorized rules",
+        "Determine scope: which emails have been intercepted, redirected, or modified?",
+        "Identify who created the rule, from what IP, and via which admin channel",
+        "Assess how long the unauthorized rule has been active",
       ],
       investigate: [
-        "Review Exchange admin audit log for all transport rule changes",
-        "Identify all external email addresses used in BCC/redirect actions",
-        "Assess volume of emails affected by unauthorized rules",
-        "Determine if security notifications were suppressed",
-        "Check if email content modification rules were used for fraud",
+        "Review Exchange admin audit log for all transport rule changes in the last 90 days",
+        "Identify all external email addresses used in BCC, redirect, or copy actions",
+        "Estimate the volume of emails affected during the active period",
+        "Determine if security notification or compliance emails were suppressed",
+        "Correlate rule creation with admin account sign-in anomalies",
       ],
       contain: [
-        "Disable and remove all unauthorized transport rules immediately",
-        "Revoke Exchange Admin account sessions",
-        "Alert all affected users and external parties",
-        "Re-enable any suppressed security notification rules",
+        "Disable the Exchange Admin account used to create the rule: Set-AzureADUser -AccountEnabled $false",
+        "Reset password for the Exchange Admin account",
+        "Revoke all sessions for the admin account: Revoke-AzureADUserAllRefreshTokens",
+        "Remove all unauthorized transport rules immediately: Remove-TransportRule -Identity <name>",
+        "Re-enable any suppressed security notification or compliance rules",
+        "Restrict New-TransportRule permission to dedicated Exchange Admin accounts via PIM",
       ],
       recover: [
-        "Implement transport rule baseline monitoring",
-        "Require PIM activation with approval for Exchange Admin role",
-        "Schedule regular transport rule audits",
-        "Notify vendors/partners who may have received modified emails",
+        "Re-enable Exchange Admin account only after credential reset and MFA re-enrollment",
+        "Implement PIM for Exchange Administrator role — eliminate permanent assignment",
+        "Enable Defender for Office 365 alert for transport rule creation or modification",
+        "Establish a documented transport rule baseline — alert on any deviation",
+        "Schedule quarterly Exchange configuration audit comparing against approved baseline",
       ],
       escalate: [
-        "BCC rule was active for extended period — massive email exfiltration",
-        "Email content modification rule used for payment fraud",
-        "Security alert suppression rule enabled attacker to remain undetected",
+        "Escalate immediately if BCC or redirect rules were active for more than 24 hours",
+        "Escalate if security notification emails were suppressed — delayed detection window",
+        "Notify compliance and legal if confidential or regulated emails were intercepted",
+        "Escalate if the Exchange Admin account has no legitimate owner — potential ghost admin",
+        "Engage Microsoft DART if rule was part of a broader advanced persistent threat campaign",
       ],
     },
   },
@@ -2910,35 +3077,40 @@ SigninLogs
     ],
     runbook: {
       triage: [
-        "Identify if risk policies are in enforcement or report-only mode",
-        "Check if affected user was excluded from risk policies",
-        "Review the sign-in event for non-risk-based anomalies (new device, new ASN)",
-        "Determine if residential proxy or VPN was used to evade detection",
-        "Assess whether other IOCs are present that risk engine didn't flag",
+        "Confirm the sign-in event details: locations, IPs, user agents, and time delta",
+        "Check if the user is enrolled in risk-based CA policies and what mode they are in (report-only vs. enforcement)",
+        "Determine if the user has a legitimate explanation (VPN, travel, known proxy)",
+        "Check if a residential proxy or anonymizing service was used to spoof the origin location",
+        "Assess whether additional IOCs are present that the risk engine did not flag",
       ],
       investigate: [
-        "Pull all sign-ins for user and manually check for behavioral anomalies",
-        "Review MDCA behavior analytics for session anomalies beyond risk score",
-        "Check if risk policies have exclusions for the affected user",
-        "Correlate with endpoint telemetry (browser history, network connections)",
-        "Identify if risk state was manually dismissed",
+        "Pull full sign-in history for the account across the suspicious window",
+        "Identify all resources accessed from the anomalous location",
+        "Determine if any persistence or enumeration activity followed the low-risk sign-in",
+        "Check if the account has a history of false-positive impossible travel (frequent VPN, travel)",
+        "Correlate with endpoint telemetry if the account is device-bound",
       ],
       contain: [
-        "Manually mark user as high risk in Identity Protection",
-        "Force MFA re-authentication or block account pending investigation",
-        "Enable report-only → enforcement mode for risk policies if not active",
-        "Remove any policy exclusions for the affected user",
+        "Manually mark user as high risk in Entra ID Identity Protection to force remediation flow",
+        "Disable account if malicious activity is confirmed: Set-AzureADUser -AccountEnabled $false",
+        "Reset password immediately if compromise is suspected",
+        "Revoke all active sessions: Revoke-AzureADUserAllRefreshTokens -ObjectId <UPN>",
+        "Convert risk policy from report-only to enforcement mode if not already enforced",
+        "Remove any policy exclusions that prevented risk detection for this user",
       ],
       recover: [
-        "Convert all Identity Protection policies from report-only to enforcement",
-        "Implement stricter Named Location policies as supplementary control",
-        "Add residential proxy ASN ranges to Named Locations blocklist",
-        "Review and remove all policy exclusions that aren't business-justified",
+        "Re-enable account only after credential reset and risk policy enforcement confirmed",
+        "Require phishing-resistant MFA re-enrollment before restoring access",
+        "Move all risk-based CA policies from report-only to enforcement mode tenant-wide",
+        "Document legitimate travel or VPN use as Named Locations where appropriate to reduce false positives",
+        "Enable Entra ID Identity Protection risky sign-in alert notifications for SOC",
       ],
       escalate: [
-        "Risk policies in report-only mode — no enforcement for extended period",
-        "Evidence that attacker specifically evaded risk detection",
-        "Risk state manually dismissed by attacker with elevated access",
+        "Escalate if post-sign-in activity shows data access, rule creation, or privilege changes",
+        "Escalate if risk policies have been in report-only mode for extended period — review why",
+        "Escalate if multiple accounts show the same bypass pattern — coordinated evasion likely",
+        "Escalate if a privileged account was accessed from the anomalous location",
+        "Notify compliance if regulated data was accessed during the undetected window",
       ],
     },
   },
@@ -3477,18 +3649,76 @@ function DetailPanel({ threat, onClose }) {
 
         {activeTab === "kql" && (
           <div style={{ animation: "slide-in-up 0.18s ease" }}>
+            {/* Header row */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
               <SectionLabel color="#34d39980" noMargin>KQL DETECTION QUERY</SectionLabel>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <span style={{ fontSize: 10, color: "#34d399", fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: 1 }}>MICROSOFT SENTINEL</span>
                 <CopyButton text={threat.kql} />
               </div>
             </div>
-            <div style={{ background: "#050810", border: "1px solid #0d2218", borderRadius: 4, padding: "16px 18px", borderLeft: `3px solid #34d399`, position: "relative", overflow: "hidden" }}>
+
+            {/* Platform badges derived from tables used */}
+            {(() => {
+              const kql = threat.kql || "";
+              const sentinelTables = ["SigninLogs","AuditLogs","AADNonInteractiveUserSignInLogs",
+                "AADServicePrincipalSignInLogs","MicrosoftGraphActivityLogs","OfficeActivity"];
+              const defenderTables = ["CloudAppEvents","EmailEvents","DeviceEvents",
+                "DeviceLogonEvents","IdentityLogonEvents","IdentityQueryEvents"];
+              const usesSentinel = sentinelTables.some(t => kql.includes(t) && !kql.match(new RegExp(`//.*${t}`)));
+              const usesDefender = defenderTables.some(t => kql.includes(t) && !kql.match(new RegExp(`//.*${t}`)));
+              const needsGraphLogs = kql.includes("MicrosoftGraphActivityLogs") && !kql.match(/\/\/.*MicrosoftGraphActivityLogs/);
+              const needsOffice365  = kql.includes("OfficeActivity");
+              const needsM365Conn   = defenderTables.some(t => kql.includes(t));
+
+              return (
+                <div style={{ marginBottom: 14, display: "flex", flexWrap: "wrap", gap: 7 }}>
+                  {usesSentinel && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px",
+                      background: "rgba(52,211,153,0.08)", border: "1px solid rgba(52,211,153,0.25)",
+                      borderRadius: 3 }}>
+                      <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#34d399" }} />
+                      <span style={{ fontSize: 10, color: "#34d399", fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: 1, fontWeight: 700 }}>MICROSOFT SENTINEL</span>
+                    </div>
+                  )}
+                  {usesDefender && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px",
+                      background: "rgba(0,120,255,0.08)", border: "1px solid rgba(0,120,255,0.25)",
+                      borderRadius: 3 }}>
+                      <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#0078ff" }} />
+                      <span style={{ fontSize: 10, color: "#0078ff", fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: 1, fontWeight: 700 }}>DEFENDER XDR</span>
+                    </div>
+                  )}
+                  {needsGraphLogs && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px",
+                      background: "rgba(255,204,0,0.08)", border: "1px solid rgba(255,204,0,0.25)",
+                      borderRadius: 3 }}>
+                      <span style={{ fontSize: 10, color: "#ffcc00", fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: 1 }}>REQUIRES: Graph Activity Logs diagnostic setting</span>
+                    </div>
+                  )}
+                  {needsOffice365 && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px",
+                      background: "rgba(255,136,51,0.08)", border: "1px solid rgba(255,136,51,0.25)",
+                      borderRadius: 3 }}>
+                      <span style={{ fontSize: 10, color: "#ff8833", fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: 1 }}>REQUIRES: Office 365 connector</span>
+                    </div>
+                  )}
+                  {needsM365Conn && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px",
+                      background: "rgba(0,120,255,0.08)", border: "1px solid rgba(0,120,255,0.2)",
+                      borderRadius: 3 }}>
+                      <span style={{ fontSize: 10, color: "#60aaff", fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: 1 }}>REQUIRES: M365 Defender connector</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* KQL block */}
+            <div style={{ background: "#050810", border: "1px solid #0d2218", borderRadius: 4, padding: "16px 18px", borderLeft: "3px solid #34d399", position: "relative", overflow: "hidden" }}>
               <div className="kql-block" style={{ color: "#7dd8a0" }}>{threat.kql}</div>
             </div>
             <div style={{ marginTop: 12, padding: "8px 14px", background: "rgba(52,211,153,0.05)", border: "1px solid rgba(52,211,153,0.12)", borderRadius: 3, fontSize: 11, color: "#5a7090", lineHeight: 1.6, fontFamily: "'IBM Plex Mono', monospace" }}>
-              <span style={{ color: "#34d399" }}>⚠ </span>Requires Microsoft Sentinel with appropriate connectors. Adjust thresholds for your environment.
+              <span style={{ color: "#34d399" }}>// </span>Commented-out blocks are alternative queries or require optional connectors. Adjust thresholds for your environment.
             </div>
           </div>
         )}
