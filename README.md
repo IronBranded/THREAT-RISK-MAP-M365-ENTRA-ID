@@ -8,7 +8,7 @@ A practical, interactive reference for DFIR investigators and security analysts 
 
  <h3 align="center">
   <a href="https://ironbranded.github.io/THREAT-RISK-MAP-M365-ENTRA-ID/" target="_blank" rel="noopener noreferrer">
-    👉 🟢 NAVIGATE THE MAP 🟢
+    🟢 NAVIGATE THE MAP 🟢
   </a>
 </h3>
 
