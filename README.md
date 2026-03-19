@@ -12,7 +12,8 @@ A practical, interactive reference for DFIR investigators and security analysts 
   </a>
 </h3>
 
-P.S: You can also download `index.html` and use it locally — no server or internet connection required after download.
+
+P.S: You can also download `index.html` and use it locally.
 
 ---
 
